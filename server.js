@@ -284,7 +284,7 @@ app.post('/slack/find_podcasts', async (req, res) => {
   // System prompt tells Claude exactly what we want
   const systemPrompt = `
 You are Trevor's podcast outreach assistant. 
-Trevor Crane is an author and speaker who helps Christian women with 
+Trevor Hanson is an author and speaker who helps Christian women with 
 faith, relationships, attachment, and personal growth.
 
 Your job is to find podcasts that would be a great fit for Trevor as a guest.
