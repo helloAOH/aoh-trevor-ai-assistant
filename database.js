@@ -66,6 +66,9 @@ async function savePodcastDecision(data) {
     keywordsSearched,
   } = data;
 
+  // Convert listenScore to integer — use 0 if it's N/A or missing
+  const scoreAsInt = parseInt(listenScore, 10) || 0;
+
   await pool.query(
     `INSERT INTO podcast_decisions 
      (podcast_title, podcast_website, podcast_description, podcast_audience, 
@@ -76,7 +79,7 @@ async function savePodcastDecision(data) {
       podcastWebsite,
       podcastDescription,
       podcastAudience,
-      listenScore,
+      scoreAsInt,
       decision,
       decidedBy,
       keywordsSearched,
