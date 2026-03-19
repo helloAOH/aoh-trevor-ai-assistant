@@ -256,11 +256,34 @@ function buildPodcastBlock(podcast, index) {
       type: 'section',
       text: {
         type: 'mrkdwn',
-        text:
-          `*${index + 1}. ${podcast.title}*\n` +
-          `📊 Listener Score: ${score} | 🏆 Rank: ${rank}\n` +
-          `🌐 ${podcast.website}\n\n` +
-          `${podcast.summary || podcast.description}`,
+        text: `*${index + 1}. ${podcast.title}*`,
+      },
+    },
+    {
+      type: 'section',
+      fields: [
+        {
+          type: 'mrkdwn',
+          text: `*🌐 Website*\n${podcast.website || 'N/A'}`,
+        },
+        {
+          type: 'mrkdwn',
+          text: `*📊 Listener Score*\n${score} | 🏆 ${rank}`,
+        },
+      ],
+    },
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `*👥 Audience*\n${podcast.audience || 'Relationship-focused listeners seeking personal growth'}`,
+      },
+    },
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `*💡 Why Trevor fits*\n${podcast.summary || podcast.description}`,
       },
     },
     {
@@ -276,6 +299,7 @@ function buildPodcastBlock(podcast, index) {
             title: podcast.title,
             website: podcast.website,
             description: podcast.description,
+            audience: podcast.audience,
             listen_score: podcast.listen_score,
           }),
         },
@@ -375,7 +399,8 @@ For each podcast return a JSON array with this exact structure:
     "title": "podcast name",
     "website": "website url",
     "description": "2-3 sentences about the podcast",
-    "summary": "Why Trevor fits this podcast in 2-3 sentences. Be specific.",
+    "audience": "Who listens to this podcast. Age, interests, values. 1-2 sentences.",
+    "summary": "Why Trevor fits this specific podcast. Be specific to their content. 2-3 sentences.",
     "listen_score": number or 0,
     "listen_score_global_rank": "percentage or N/A",
     "tier": 1,
