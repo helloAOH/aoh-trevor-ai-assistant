@@ -4,7 +4,6 @@ const express = require('express');
 const Anthropic = require('@anthropic-ai/sdk');
 const axios = require('axios');
 const crypto = require('crypto');
-const cheerio = require('cheerio');
 const TREVOR_CONTEXT = require('./context');
 const db = require('./database');
 
