@@ -151,8 +151,12 @@ async function askClaude(userMessage) {
 
 // ── GENERATE PITCH EMAIL ─────────────────────────────────
 async function generatePitchEmail(
-  podcastName, podcastDescription, podcastAudience,
-  emailNumber, hostName, chosenAngle
+  podcastName,
+  podcastDescription,
+  podcastAudience,
+  emailNumber,
+  hostName,
+  chosenAngle
 ) {
   const client = new Anthropic.Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -245,19 +249,16 @@ async function postToSlackChannel(channel, blocks, text) {
 
 // ── BUILD PODCAST CARD ───────────────────────────────────
 function buildPodcastBlock(podcast, index) {
-
-  // Quality score display
   const score = podcast.quality_score || 0;
   let scoreDisplay = '';
   if (score >= 9) scoreDisplay = `🏆 ${score}/10 — Elite`;
   else if (score >= 7) scoreDisplay = `⭐ ${score}/10 — Excellent`;
-  else if (score >= 5) scoreDisplay = `✅ ${score}/10 — Good Fit`;
-  else scoreDisplay = `⚠️ ${score}/10 — Weak Fit`;
+  else scoreDisplay = `✅ ${score}/10 — Good Fit`;
 
-  // Email display
-  const emailDisplay = podcast.contact_email
-    ? `📧 ${podcast.contact_email}`
-    : '📧 Not found — manual search needed';
+  const emailDisplay =
+    podcast.contact_email && podcast.contact_email !== 'Not found'
+      ? `📧 ${podcast.contact_email}`
+      : `📧 ${podcast.contact_email || 'Not found — check website'}`;
 
   return [
     { type: 'divider' },
@@ -271,16 +272,42 @@ function buildPodcastBlock(podcast, index) {
     {
       type: 'section',
       fields: [
-        { type: 'mrkdwn', text: `*🌐 Website*\n${podcast.website || 'N/A'}` },
-        { type: 'mrkdwn', text: `*🎙️ Episodes*\n${podcast.total_episodes || 'N/A'}` },
+        {
+          type: 'mrkdwn',
+          text: `*🌐 Website*\n${podcast.website || 'N/A'}`,
+        },
+        {
+          type: 'mrkdwn',
+          text: `*🎙️ Episodes*\n${podcast.total_episodes || 'N/A'} (${podcast.years_running || 'Unknown'})`,
+        },
       ],
     },
     {
       type: 'section',
       fields: [
-        { type: 'mrkdwn', text: `*⭐ Quality Score*\n${scoreDisplay}` },
-        { type: 'mrkdwn', text: `*🍎 Apple Reviews*\n${podcast.apple_reviews || 'Unknown'}` },
+        {
+          type: 'mrkdwn',
+          text: `*⭐ Quality Score*\n${scoreDisplay}`,
+        },
+        {
+          type: 'mrkdwn',
+          text: `*📱 Host Following*\n${podcast.host_social_following || 'Unknown'}`,
+        },
       ],
+    },
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `*🎤 Notable Guests*\n${podcast.notable_guests || 'Not available'}`,
+      },
+    },
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `*📊 Score Breakdown*\n${podcast.score_breakdown || 'N/A'}`,
+      },
     },
     {
       type: 'section',
@@ -356,7 +383,10 @@ function buildEmailBlock(podcastTitle, emailNumber, pitchData, podcastData) {
     {
       type: 'section',
       fields: [
-        { type: 'mrkdwn', text: `*Angle:*\n${pitchData.angle_topic || 'Default angle'}` },
+        {
+          type: 'mrkdwn',
+          text: `*Angle:*\n${pitchData.angle_topic || 'Default angle'}`,
+        },
         {
           type: 'mrkdwn',
           text: `*Attach:*\n<${TREVOR_CONTEXT.links.mediaKit}|Media Kit>`,
@@ -460,11 +490,12 @@ app.post('/slack/find_podcasts', async (req, res) => {
     const rejectedPodcasts = await db.getRejectedPodcasts();
     const allExcluded = [...TREVOR_CONTEXT.alreadyPitched, ...rejectedPodcasts];
     const pastDecisions = await db.getPastDecisions(10);
-    const pastContext = pastDecisions.length > 0
-      ? `\nPAST DECISIONS (learn from these):\n${pastDecisions
-          .map((d) => `- ${d.podcast_title}: ${d.decision}`)
-          .join('\n')}`
-      : '';
+    const pastContext =
+      pastDecisions.length > 0
+        ? `\nPAST DECISIONS (learn from these):\n${pastDecisions
+            .map((d) => `- ${d.podcast_title}: ${d.decision}`)
+            .join('\n')}`
+        : '';
 
     const systemPrompt = `
 You are Trevor Hanson's podcast outreach assistant.
@@ -473,44 +504,70 @@ ABOUT TREVOR:
 ${TREVOR_CONTEXT.bio}
 
 TARGET SECTORS IN PRIORITY ORDER:
-1. Relationships & Dating — podcasts about relationships, dating, attachment, love
+1. Relationships and Dating — podcasts about relationships, dating, attachment, love
 2. Personal Development — self-improvement, mindset, success, entrepreneurship
 3. Young Successful Women and Christian Women — lifestyle, faith, women empowerment
 
 HOW TO EVALUATE PODCAST QUALITY:
-Since ranking data is not available, evaluate each podcast using these signals:
-- Episode count: 100+ episodes = established show
-- Description quality: Does it sound professional and focused?
-- Known show recognition: Is this a well-known show you have knowledge of?
-- Apple Podcasts reviews: Use your knowledge to estimate review count
-- Audience size signals: Guest quality, production value mentioned in description
-- Audience alignment: How well does it match Trevor's target audience?
+Score each podcast out of 10 using these signals:
 
-QUALITY SCORE GUIDE (you assign this):
-- 9-10: Major well-known show, huge audience, perfect fit
-- 7-8: Solid established show, good audience, strong fit
-- 5-6: Decent show, moderate audience, reasonable fit
-- Below 5: Small or unclear show — do not include
+EPISODE COUNT (up to 2 points):
+- 500+ episodes = 2 points
+- 200-499 episodes = 1.5 points
+- 100-199 episodes = 1 point
+- Under 100 episodes = 0.5 points
 
-ONLY include podcasts you score 7 or above.
+SHOW LONGEVITY (up to 1 point):
+- Running 4+ years = 1 point
+- Running 2-3 years = 0.5 points
+- Under 2 years = 0 points
+
+SOCIAL MEDIA AND AUDIENCE SIZE (up to 2 points):
+- Host has 100k+ followers on any platform = 2 points
+- Host has 50k-100k followers = 1.5 points
+- Host has 10k-50k followers = 1 point
+- Unknown or small = 0.5 points
+
+GUEST QUALITY (up to 2 points):
+- Has interviewed major names (NYT bestsellers, celebrities, top experts) = 2 points
+- Has interviewed mid-level known guests = 1 point
+- Unknown guests only = 0 points
+
+NICHE AUTHORITY (up to 2 points):
+- Is THE go-to show in their niche = 2 points
+- Strong presence but not THE top show = 1 point
+- One of many similar shows = 0.5 points
+
+AUDIENCE ALIGNMENT WITH TREVOR (up to 1 point):
+- Perfect match (relationships + women + personal growth) = 1 point
+- Good match = 0.5 points
+- Weak match = 0 points
+
+TOTAL SCORE = sum of all above (max 10)
+
+ONLY return podcasts scoring 7 or above.
+9-10 = Elite — must include
+7-8 = Excellent — include
+Below 7 = do not include
 
 CONTACT EMAIL:
-For each podcast use your knowledge to find the most likely contact email.
-Check: website contact page patterns, host social media, podcast description.
-Common patterns: hello@, contact@, podcast@, info@, [hostname]@
-If genuinely unknown write "Not found".
+For each podcast find the most likely contact or booking email.
+Common patterns: hello@, contact@, booking@, pitch@, podcast@, info@
+If unknown write: "Not found — check [website]/contact"
 
-PODCASTS TO EXCLUDE:
+PODCASTS TO EXCLUDE (already in pipeline or previously rejected):
 ${allExcluded.join(', ')}
 ${pastContext}
 
 YOUR JOB:
 1. Search for podcasts matching the keywords
-2. Evaluate each one for quality (score 7+ only)
-3. Find contact email for each
-4. Return top 5 results sorted by quality score
+2. Score each podcast using the criteria above
+3. Only include podcasts scoring 7 or above
+4. Find contact email for each
+5. Return top 5 sorted by score highest first
 
-Return ONLY a JSON array:
+Return ONLY a JSON array. No other text.
+
 [
   {
     "title": "podcast name",
@@ -520,9 +577,11 @@ Return ONLY a JSON array:
     "summary": "Why Trevor fits this specific podcast. Be specific. 2-3 sentences.",
     "total_episodes": 250,
     "quality_score": 8,
-    "quality_reasoning": "One sentence explaining the score",
-    "apple_reviews": "5,000+ reviews" or "Unknown",
-    "contact_email": "contact@podcastname.com or Not found",
+    "score_breakdown": "Episodes: 1.5 | Longevity: 1 | Social: 2 | Guests: 1.5 | Authority: 1.5 | Alignment: 1",
+    "years_running": "5 years",
+    "notable_guests": "Brene Brown, Matthew Hussey, Jay Shetty",
+    "host_social_following": "150k Instagram",
+    "contact_email": "contact@podcastname.com",
     "tier": 1,
     "recommended_angle": "angle_1"
   }
@@ -531,10 +590,10 @@ Return ONLY a JSON array:
 
     const claudeResponse = await askClaudeWithTools(
       `Search for podcasts matching: "${text}". 
-       Evaluate each podcast for quality and audience fit for Trevor. 
-       Only return podcasts you score 7 or above out of 10.
+       Evaluate each podcast for quality using the scoring criteria. 
+       Only return podcasts scoring 7 or above out of 10.
        Find contact emails for each podcast.
-       Return top 5 results.`,
+       Return top 5 results sorted by quality score.`,
       systemPrompt
     );
 
@@ -584,8 +643,7 @@ Return ONLY a JSON array:
             `Found *${podcasts.length} quality podcasts* for Trevor.\n\n` +
             `*Quality Score Guide:*\n` +
             `🏆 9-10 — Elite show\n` +
-            `⭐ 7-8 — Excellent fit\n` +
-            `✅ 5-6 — Good fit\n\n` +
+            `⭐ 7-8 — Excellent fit\n\n` +
             `Click *✅ Approve* to generate a pitch or *❌ Reject* to dismiss.`,
         },
       },
@@ -645,13 +703,15 @@ app.post('/slack/actions', async (req, res) => {
 
     await postToSlackChannel(
       channelId,
-      [{
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: `❌ *${podcastData.title}* rejected by ${userName} and saved to database.`,
+      [
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `❌ *${podcastData.title}* rejected by ${userName} and saved to database.`,
+          },
         },
-      }],
+      ],
       `Rejected: ${podcastData.title}`
     );
   }
@@ -673,13 +733,15 @@ app.post('/slack/actions', async (req, res) => {
 
     await postToSlackChannel(
       channelId,
-      [{
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: `✅ *${podcastData.title}* approved by ${userName}!\n⏳ Generating Email 1...`,
+      [
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `✅ *${podcastData.title}* approved by ${userName}!\n⏳ Generating Email 1...`,
+          },
         },
-      }],
+      ],
       `Approved: ${podcastData.title}`
     );
 
@@ -695,23 +757,29 @@ app.post('/slack/actions', async (req, res) => {
 
       await db.savePitchEmail(podcastData.title, 1, pitchData.email_content);
       const emailBlocks = buildEmailBlock(
-        podcastData.title, 1, pitchData, podcastData
+        podcastData.title,
+        1,
+        pitchData,
+        podcastData
       );
       await postToSlackChannel(
-        channelId, emailBlocks, `Email 1 for ${podcastData.title}`
+        channelId,
+        emailBlocks,
+        `Email 1 for ${podcastData.title}`
       );
-
     } catch (error) {
       console.error('Pitch error:', error.message);
       await postToSlackChannel(
         channelId,
-        [{
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: `❌ Could not generate pitch: ${error.message}`,
+        [
+          {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: `❌ Could not generate pitch: ${error.message}`,
+            },
           },
-        }],
+        ],
         'Pitch failed'
       );
     }
@@ -724,13 +792,15 @@ app.post('/slack/actions', async (req, res) => {
 
     await postToSlackChannel(
       channelId,
-      [{
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: `⏳ Generating Email ${emailNumber} for *${title}*...`,
+      [
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `⏳ Generating Email ${emailNumber} for *${title}*...`,
+          },
         },
-      }],
+      ],
       `Generating email ${emailNumber}`
     );
 
@@ -747,20 +817,23 @@ app.post('/slack/actions', async (req, res) => {
       await db.savePitchEmail(title, emailNumber, pitchData.email_content);
       const emailBlocks = buildEmailBlock(title, emailNumber, pitchData, data);
       await postToSlackChannel(
-        channelId, emailBlocks, `Email ${emailNumber} for ${title}`
+        channelId,
+        emailBlocks,
+        `Email ${emailNumber} for ${title}`
       );
-
     } catch (error) {
       console.error('Email generation error:', error.message);
       await postToSlackChannel(
         channelId,
-        [{
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: `❌ Could not generate Email ${emailNumber}: ${error.message}`,
+        [
+          {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: `❌ Could not generate Email ${emailNumber}: ${error.message}`,
+            },
           },
-        }],
+        ],
         'Email generation failed'
       );
     }
