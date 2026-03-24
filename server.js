@@ -600,10 +600,25 @@ Return ONLY a JSON array. No other text.
     let podcasts = [];
     try {
       const jsonMatch = claudeResponse.match(/\[[\s\S]*\]/);
-      if (jsonMatch) podcasts = JSON.parse(jsonMatch[0]);
+      if (jsonMatch) {
+        podcasts = JSON.parse(jsonMatch[0]);
+      } else {
+        // Log what Claude actually returned so we can debug
+        console.error('No JSON array found in Claude response');
+        console.error('Claude returned:', claudeResponse.slice(0, 500));
+        await sendToSlack(
+          response_url,
+          `❌ Claude did not return expected format.\n\nClaude said:\n${claudeResponse.slice(0, 300)}`
+        );
+        return;
+      }
     } catch (e) {
       console.error('JSON parse error:', e.message);
-      await sendToSlack(response_url, `❌ Error parsing results. Please try again.`);
+      console.error('Raw response:', claudeResponse.slice(0, 500));
+      await sendToSlack(
+        response_url,
+        `❌ Error parsing results: ${e.message}`
+      );
       return;
     }
 
