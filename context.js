@@ -2,19 +2,19 @@
 const TREVOR_CONTEXT = {
 
   bio: `
-    Trevor Hanson is a therapist and coach who helps people heal anxious 
-    attachment and build real self-trust. 
-    
-    His story: He spent years trying to prove he was enough through his career 
-    and relationships, including landing a big corporate role at Tesla. 
-    Everything fell apart at once — he was laid off, broke his jaw in a skiing 
-    accident, and broke off a majorly toxic engagement after realizing he had 
-    completely lost himself. That season pushed him into therapy and completely 
+    Trevor Hanson is a therapist and coach who helps people heal anxious
+    attachment and build real self-trust.
+
+    His story: He spent years trying to prove he was enough through his career
+    and relationships, including landing a big corporate role at Tesla.
+    Everything fell apart at once — he was laid off, broke his jaw in a skiing
+    accident, and broke off a majorly toxic engagement after realizing he had
+    completely lost himself. That season pushed him into therapy and completely
     changed the direction of his life and work.
-    
-    Now through The Art of Healing, he helps people learn to feel safe, worthy, 
+
+    Now through The Art of Healing, he helps people learn to feel safe, worthy,
     and secure in their relationships and within themselves.
-    
+
     Audience reached: 800k+
     IG: @theartofhealingbytrevor — 551k followers
     TikTok: @theartofhealingbytrevor — 248k followers
@@ -100,17 +100,13 @@ const TREVOR_CONTEXT = {
     },
     {
       tier: 3,
-      name: 'Christian Women & Faith',
-      description: 'Faith-based podcasts targeting Christian women',
-      examples: ['We Can Do Hard Things', 'The Real Life Podcast', 'ONE Extraordinary Marriage'],
+      name: 'Christian Women & Young Successful Women',
+      description: 'Faith-based podcasts, lifestyle and women empowerment shows',
+      examples: [
+        'We Can Do Hard Things', 'The Real Life Podcast',
+        'ONE Extraordinary Marriage', 'Girls Gotta Eat',
+      ],
       listenScoreMin: 50,
-    },
-    {
-      tier: 4,
-      name: "Women's Lifestyle & Wellness",
-      description: 'General lifestyle, wellness, and women-focused shows',
-      examples: ['Girls Gotta Eat', 'What Fresh Hell', 'Katie Wells Wellness Mama'],
-      listenScoreMin: 55,
     },
   ],
 

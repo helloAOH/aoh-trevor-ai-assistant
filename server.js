@@ -46,7 +46,7 @@ function verifySlackRequest(req) {
 }
 
 // ── SEARCH PODCASTS ──────────────────────────────────────
-async function search_podcasts({ keywords, max_results = 8 }) {
+async function search_podcasts({ keywords, max_results = 10 }) {
   console.log(`Searching podcasts for: ${keywords}`);
   const response = await axios.get(
     'https://listen-api.listennotes.com/api/v2/search',
@@ -68,7 +68,7 @@ async function search_podcasts({ keywords, max_results = 8 }) {
       total_episodes: p.total_episodes,
       listennotes_url: `https://www.listennotes.com/podcasts/${p.id}`,
       listen_score: p.listen_score || 0,
-      listen_score_global_rank: p.listen_score_global_rank || 'N/A',
+      listen_score_global_rank: p.listen_score_global_rank || null,
     })),
   };
 }
@@ -82,7 +82,7 @@ const tools = [
       type: 'object',
       properties: {
         keywords: { type: 'string', description: 'Search keywords' },
-        max_results: { type: 'number', description: 'Number of results. Default 8.' },
+        max_results: { type: 'number', description: 'Number of results. Default 10.' },
       },
       required: ['keywords'],
     },
@@ -158,7 +158,6 @@ async function generatePitchEmail(podcastName, podcastDescription, podcastAudien
     .map((a) => `${a.id}: "${a.topic}" (Best for: ${a.bestFor})`)
     .join('\n');
 
-  // Build the correct template based on email number
   let template = '';
   if (emailNumber === 1) {
     template = TREVOR_CONTEXT.pitchTemplates.email1('[HOST_NAME]', '[SPECIFIC_TO_PODCAST]');
@@ -240,9 +239,26 @@ async function postToSlackChannel(channel, blocks, text) {
 
 // ── BUILD PODCAST CARD ───────────────────────────────────
 function buildPodcastBlock(podcast, index) {
-  const rank = podcast.listen_score_global_rank !== 'N/A'
-    ? `Top ${podcast.listen_score_global_rank}`
-    : 'Unranked';
+  // Parse rank for display
+  let rankDisplay = '❓ Unranked';
+
+  if (podcast.listen_score_global_rank) {
+    const rankStr = podcast.listen_score_global_rank.toString().toLowerCase();
+    const rankNum = parseFloat(rankStr.replace(/[^0-9.]/g, ''));
+
+    if (!isNaN(rankNum)) {
+      if (rankNum <= 0.5) {
+        rankDisplay = `🏆 Top ${rankNum}% — Elite`;
+      } else if (rankNum <= 1.0) {
+        rankDisplay = `⭐ Top ${rankNum}% — Excellent`;
+      } else if (rankNum <= 1.5) {
+        rankDisplay = `✅ Top ${rankNum}% — Target Range`;
+      } else {
+        rankDisplay = `⚠️ Top ${rankNum}% — Below Target`;
+      }
+    }
+  }
+
   const score = podcast.listen_score ? `${podcast.listen_score}/100` : 'N/A';
 
   return [
@@ -255,7 +271,14 @@ function buildPodcastBlock(podcast, index) {
       type: 'section',
       fields: [
         { type: 'mrkdwn', text: `*🌐 Website*\n${podcast.website || 'N/A'}` },
-        { type: 'mrkdwn', text: `*📊 Score*\n${score} | 🏆 ${rank}` },
+        { type: 'mrkdwn', text: `*📊 Listen Score*\n${score}` },
+      ],
+    },
+    {
+      type: 'section',
+      fields: [
+        { type: 'mrkdwn', text: `*🏆 Global Rank*\n${rankDisplay}` },
+        { type: 'mrkdwn', text: `*📂 Episodes*\n${podcast.total_episodes || 'N/A'}` },
       ],
     },
     {
@@ -379,7 +402,6 @@ function buildEmailBlock(podcastTitle, emailNumber, pitchData, podcastData) {
 
 // ── ROUTES ───────────────────────────────────────────────
 
-// Health check
 app.get('/', (req, res) => {
   res.json({ status: 'ok', message: 'Trevor AI Assistant is running' });
 });
@@ -414,7 +436,7 @@ app.post('/slack/find_podcasts', async (req, res) => {
 
   res.json({
     response_type: 'ephemeral',
-    text: `🔍 Searching for podcasts matching *"${text}"*...\nThis may take 20-30 seconds.`,
+    text: `🔍 Searching for podcasts matching *"${text}"*...\nOnly showing top 0.5%-1.5% ranked podcasts. This may take 20-30 seconds.`,
   });
 
   try {
@@ -427,18 +449,30 @@ app.post('/slack/find_podcasts', async (req, res) => {
           .join('\n')}`
       : '';
 
-    const tiersText = TREVOR_CONTEXT.tiers
-      .map((t) => `Tier ${t.tier} - ${t.name}: ${t.description}`)
-      .join('\n');
-
     const systemPrompt = `
 You are Trevor Hanson's podcast outreach assistant.
 
 ABOUT TREVOR:
 ${TREVOR_CONTEXT.bio}
 
-TARGETING TIERS (priority order):
-${tiersText}
+TARGET SECTORS IN PRIORITY ORDER:
+1. Relationships & Dating — podcasts about relationships, dating, attachment, love
+2. Personal Development — self-improvement, mindset, success, entrepreneurship
+3. Young Successful Women and Christian Women — lifestyle, faith, women empowerment
+
+RANKING REQUIREMENT — NON-NEGOTIABLE:
+You MUST ONLY return podcasts ranked between TOP 0.5% and TOP 1.5% globally on ListenNotes.
+
+STRICT RULES:
+- Top 0.5% = INCLUDE ✅
+- Top 1% = INCLUDE ✅
+- Top 1.5% = INCLUDE ✅
+- Top 2% or worse = EXCLUDE ❌
+- Unranked = EXCLUDE ❌
+- N/A = EXCLUDE ❌
+- No rank data = EXCLUDE ❌
+
+If you cannot find 5 podcasts that meet the 0.5%-1.5% requirement, return ONLY the ones that qualify. Do NOT fill spots with lower-ranked podcasts.
 
 PODCASTS TO EXCLUDE (already in pipeline or previously rejected):
 ${allExcluded.join(', ')}
@@ -446,11 +480,13 @@ ${pastContext}
 
 YOUR JOB:
 1. Search for podcasts matching the keywords
-2. Exclude any podcast already listed above
-3. Prioritize high listen scores (top 0.5% to 1.5% globally)
-4. Return top 5 NEW podcasts not in the pipeline
+2. Check each podcast's global rank from ListenNotes
+3. ONLY include podcasts ranked top 0.5% to top 1.5%
+4. Exclude anything already in the pipeline
+5. Return results sorted best rank first
 
-Return ONLY a JSON array:
+Return ONLY a JSON array. If no podcasts qualify return [].
+
 [
   {
     "title": "podcast name",
@@ -458,8 +494,8 @@ Return ONLY a JSON array:
     "description": "2-3 sentences about the podcast",
     "audience": "Who listens. Age, interests, values. 1-2 sentences.",
     "summary": "Why Trevor fits this specific podcast. 2-3 sentences.",
-    "listen_score": 0,
-    "listen_score_global_rank": "percentage or N/A",
+    "listen_score": 75,
+    "listen_score_global_rank": "top 1%",
     "tier": 1,
     "recommended_angle": "angle_1"
   }
@@ -467,7 +503,7 @@ Return ONLY a JSON array:
     `.trim();
 
     const claudeResponse = await askClaudeWithTools(
-      `Search for podcasts matching: "${text}". Find top 5 NEW podcasts for Trevor not already in his pipeline.`,
+      `Search for podcasts matching: "${text}". Find podcasts ONLY in the top 0.5% to 1.5% globally. Do not include anything outside this range.`,
       systemPrompt
     );
 
@@ -480,29 +516,64 @@ Return ONLY a JSON array:
       return;
     }
 
+    // ── HARD FILTER — only top 0.5% to 1.5% ─────────────
+    podcasts = podcasts.filter((podcast) => {
+      const rank = podcast.listen_score_global_rank;
+
+      if (!rank || rank === 'N/A' || rank === null) {
+        console.log(`Filtered out (no rank): ${podcast.title}`);
+        return false;
+      }
+
+      const rankNum = parseFloat(
+        rank.toString().toLowerCase().replace(/[^0-9.]/g, '')
+      );
+
+      if (isNaN(rankNum) || rankNum > 1.5) {
+        console.log(`Filtered out (rank ${rankNum}% outside range): ${podcast.title}`);
+        return false;
+      }
+
+      console.log(`Passed filter (top ${rankNum}%): ${podcast.title}`);
+      return true;
+    });
+
     if (podcasts.length === 0) {
-      await sendToSlack(response_url, `No new podcasts found for "${text}". Try different keywords.`);
+      await sendToSlack(
+        response_url,
+        `No podcasts found in the top 0.5%-1.5% range for *"${text}"*.\n\nTry broader keywords like:\n• \`/find_podcasts relationships\`\n• \`/find_podcasts personal development women\`\n• \`/find_podcasts dating advice\``
+      );
       return;
     }
 
     const headerBlocks = [
       {
         type: 'header',
-        text: { type: 'plain_text', text: `🎙️ Podcast Results for "${text}"`, emoji: true },
+        text: {
+          type: 'plain_text',
+          text: `🎙️ Top Ranked Podcasts for "${text}"`,
+          emoji: true,
+        },
       },
       {
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: `Found *${podcasts.length} new podcasts* for Trevor.\nClick *✅ Approve* to generate a pitch or *❌ Reject* to dismiss.`,
+          text:
+            `Found *${podcasts.length} qualified podcasts* in the top 0.5%-1.5% range.\n\n` +
+            `*Ranking Guide:*\n` +
+            `🏆 Top 0.5% — Elite\n` +
+            `⭐ Top 1% — Excellent\n` +
+            `✅ Top 1.5% — Target Range\n\n` +
+            `Click *✅ Approve* to generate a pitch or *❌ Reject* to dismiss.`,
         },
       },
     ];
 
     const podcastBlocks = podcasts.flatMap((p, i) => buildPodcastBlock(p, i));
     const channel = process.env.SLACK_PODCAST_CHANNEL || '#find-podcasts';
-    await postToSlackChannel(channel, [...headerBlocks, ...podcastBlocks], `Results for "${text}"`);
-    await sendToSlack(response_url, `✅ Results posted to ${channel} — ${podcasts.length} podcasts found!`);
+    await postToSlackChannel(channel, [...headerBlocks, ...podcastBlocks], `Top ranked results for "${text}"`);
+    await sendToSlack(response_url, `✅ Results posted to ${channel} — ${podcasts.length} top-ranked podcasts found!`);
 
   } catch (error) {
     console.error('Error:', error.message);

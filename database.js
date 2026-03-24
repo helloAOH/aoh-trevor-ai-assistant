@@ -66,12 +66,11 @@ async function savePodcastDecision(data) {
     keywordsSearched,
   } = data;
 
-  // Convert listenScore to integer — use 0 if it's N/A or missing
   const scoreAsInt = parseInt(listenScore, 10) || 0;
 
   await pool.query(
-    `INSERT INTO podcast_decisions 
-     (podcast_title, podcast_website, podcast_description, podcast_audience, 
+    `INSERT INTO podcast_decisions
+     (podcast_title, podcast_website, podcast_description, podcast_audience,
       listen_score, decision, decided_by, keywords_searched)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
     [
@@ -89,7 +88,7 @@ async function savePodcastDecision(data) {
 
 async function savePitchEmail(podcastTitle, emailNumber, emailContent) {
   const result = await pool.query(
-    `INSERT INTO pitch_history 
+    `INSERT INTO pitch_history
      (podcast_title, email_number, email_content)
      VALUES ($1, $2, $3)
      RETURNING id`,
@@ -118,8 +117,8 @@ async function getRejectedPodcasts() {
 
 async function getApprovedPodcasts() {
   const result = await pool.query(
-    `SELECT podcast_title, podcast_website 
-     FROM podcast_decisions 
+    `SELECT podcast_title, podcast_website
+     FROM podcast_decisions
      WHERE decision = 'approved'`
   );
   return result.rows;
