@@ -10,7 +10,7 @@ const db = require('./database');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// ── MIDDLEWARE ──────────────────────────────────────────
+// ── MIDDLEWARE ───────────────────────────────────────────
 app.use(
   express.urlencoded({
     extended: true,
@@ -34,7 +34,11 @@ function verifySlackRequest(req) {
   if (Math.abs(currentTime - slackTimestamp) > 300) return false;
   const sigBase = `v0:${slackTimestamp}:${req.rawBody}`;
   const mySignature =
-    'v0=' + crypto.createHmac('sha256', secret).update(sigBase, 'utf8').digest('hex');
+    'v0=' +
+    crypto
+      .createHmac('sha256', secret)
+      .update(sigBase, 'utf8')
+      .digest('hex');
   try {
     return crypto.timingSafeEqual(
       Buffer.from(mySignature, 'utf8'),
@@ -46,53 +50,43 @@ function verifySlackRequest(req) {
 }
 
 // ── FETCH APPLE PODCAST CHARTS ───────────────────────────
-// Apple publishes top 50 charts per category via RSS
-// These are the Apple Podcast category IDs we care about
 const APPLE_CHART_CATEGORIES = {
-  relationships: '1528997175', // Society & Culture
-  personal_development: '1527223741', // Self-Improvement  
-  health_women: '1545225244', // Health & Fitness
-  society: '1368298768', // Society & Culture (main)
-  religion: '1548855547', // Religion & Spirituality
+  relationships: '1528997175',
+  personal_development: '1527223741',
+  health_women: '1545225244',
+  society: '1368298768',
+  religion: '1548855547',
 };
 
 async function fetchAppleCharts() {
   const results = {};
-
   for (const [category, id] of Object.entries(APPLE_CHART_CATEGORIES)) {
     try {
-      // Apple RSS feed for top podcasts by category
       const url = `https://rss.applemarketingtools.com/api/v2/us/podcasts/top/50/${id}/podcasts.json`;
       const response = await axios.get(url, {
         timeout: 8000,
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (compatible; PodcastBot/1.0)',
-        },
+        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; PodcastBot/1.0)' },
       });
-
       if (response.data?.feed?.results) {
         results[category] = response.data.feed.results.map((p, index) => ({
           rank: index + 1,
           name: p.name,
           artistName: p.artistName,
-          url: p.url,
-          artworkUrl: p.artworkUrl100,
         }));
-        console.log(`Apple charts fetched for ${category}: ${results[category].length} podcasts`);
+        console.log(
+          `Apple charts fetched for ${category}: ${results[category].length} podcasts`
+        );
       }
     } catch (err) {
       console.error(`Apple charts error for ${category}:`, err.message);
       results[category] = [];
     }
   }
-
   return results;
 }
 
-// Format Apple charts into a readable string for Claude
 function formatAppleChartsForClaude(charts) {
   let text = 'APPLE PODCAST CHARTS (fetched today):\n\n';
-
   for (const [category, podcasts] of Object.entries(charts)) {
     if (podcasts.length === 0) continue;
     text += `${category.toUpperCase()} TOP ${podcasts.length}:\n`;
@@ -101,7 +95,6 @@ function formatAppleChartsForClaude(charts) {
     });
     text += '\n';
   }
-
   return text;
 }
 
@@ -141,7 +134,10 @@ const tools = [
       type: 'object',
       properties: {
         keywords: { type: 'string', description: 'Search keywords' },
-        max_results: { type: 'number', description: 'Number of results. Default 10.' },
+        max_results: {
+          type: 'number',
+          description: 'Number of results. Default 10.',
+        },
       },
       required: ['keywords'],
     },
@@ -150,7 +146,9 @@ const tools = [
 
 // ── CLAUDE WITH TOOL CALLING ─────────────────────────────
 async function askClaudeWithTools(userMessage, systemPrompt) {
-  const client = new Anthropic.Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  const client = new Anthropic.Anthropic({
+    apiKey: process.env.ANTHROPIC_API_KEY,
+  });
   const messages = [{ role: 'user', content: userMessage }];
 
   let response = await client.messages.create({
@@ -162,7 +160,9 @@ async function askClaudeWithTools(userMessage, systemPrompt) {
   });
 
   while (response.stop_reason === 'tool_use') {
-    const toolUseBlock = response.content.find((b) => b.type === 'tool_use');
+    const toolUseBlock = response.content.find(
+      (b) => b.type === 'tool_use'
+    );
     if (!toolUseBlock) break;
 
     let toolResult;
@@ -202,11 +202,16 @@ async function askClaudeWithTools(userMessage, systemPrompt) {
 
 // ── BASIC CLAUDE ─────────────────────────────────────────
 async function askClaude(userMessage) {
-  const client = new Anthropic.Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  const client = new Anthropic.Anthropic({
+    apiKey: process.env.ANTHROPIC_API_KEY,
+  });
   const response = await client.messages.create({
     model: 'claude-opus-4-5',
     max_tokens: 1024,
-    system: 'You are a helpful assistant in a Slack workspace. Keep answers concise.',
+    system:
+      'You are a helpful assistant in a Slack workspace. ' +
+      'Keep answers concise. ' +
+      'GUARDRAIL: Never send emails or take any external action. Only provide information and drafts.',
     messages: [{ role: 'user', content: userMessage }],
   });
   return response.content[0].text;
@@ -221,7 +226,9 @@ async function generatePitchEmail(
   hostName,
   chosenAngle
 ) {
-  const client = new Anthropic.Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  const client = new Anthropic.Anthropic({
+    apiKey: process.env.ANTHROPIC_API_KEY,
+  });
 
   const anglesText = TREVOR_CONTEXT.pitchAngles
     .map((a) => `${a.id}: "${a.topic}" (Best for: ${a.bestFor})`)
@@ -246,6 +253,9 @@ async function generatePitchEmail(
   }
 
   const prompt = `
+GUARDRAIL: You are drafting a pitch email for human review only.
+This email will NOT be sent automatically. A human must review and send it manually.
+
 You are helping Trevor Hanson pitch himself as a podcast guest on "${podcastName}".
 
 Podcast description: ${podcastDescription}
@@ -261,7 +271,8 @@ Instructions:
 - For Email 1: Replace [HOST_NAME] with the host name. Replace [SPECIFIC_TO_PODCAST] with 8-12 words describing what this podcast helps listeners with.
 - For Email 2 and 3: Replace [HOST_NAME] with the host name. Replace [EPISODE_TOPIC_ANGLE] with the chosen angle topic.
 - Keep EVERYTHING else exactly as written. Do not change any other text.
-- Do not add any commentary before or after the email.
+- Match Trevor's voice — warm, direct, confident but not arrogant.
+- Do not add commentary before or after the email.
 
 Return a JSON object with no backticks and no markdown:
 {
@@ -272,7 +283,7 @@ Return a JSON object with no backticks and no markdown:
   "email_content": "the complete finished email with all links intact"
 }
 
-Here is the template to fill in:
+Template to fill in:
 ${template}
   `.trim();
 
@@ -283,8 +294,6 @@ ${template}
   });
 
   const text = response.content[0].text;
-
-  // Clean any backticks before parsing
   const cleaned = text.replace(/```json/g, '').replace(/```/g, '').trim();
 
   try {
@@ -331,13 +340,13 @@ function buildPodcastBlock(podcast, index) {
   else if (score >= 7) scoreDisplay = `⭐ ${score}/10 — Excellent`;
   else scoreDisplay = `✅ ${score}/10 — Good Fit`;
 
-  // Apple chart badge
   const appleBadge = podcast.apple_chart_rank
-    ? `🍎 #${podcast.apple_chart_rank} on Apple Charts`
+    ? `🍎 #${podcast.apple_chart_rank} on Apple Charts Today`
     : '';
 
   const emailDisplay =
-    podcast.contact_email && podcast.contact_email !== 'Not found'
+    podcast.contact_email &&
+    podcast.contact_email !== 'Not found'
       ? `📧 ${podcast.contact_email}`
       : `📧 ${podcast.contact_email || 'Not found — check website'}`;
 
@@ -459,7 +468,10 @@ function buildEmailBlock(podcastTitle, emailNumber, pitchData, podcastData) {
     {
       type: 'section',
       fields: [
-        { type: 'mrkdwn', text: `*From:*\ntrevor@theartofhealingbytrevor.com` },
+        {
+          type: 'mrkdwn',
+          text: `*From:*\ntrevor@theartofhealingbytrevor.com`,
+        },
         { type: 'mrkdwn', text: `*To:*\n${podcastTitle}` },
       ],
     },
@@ -473,6 +485,15 @@ function buildEmailBlock(podcastTitle, emailNumber, pitchData, podcastData) {
         {
           type: 'mrkdwn',
           text: `*Attach:*\n<${TREVOR_CONTEXT.links.mediaKit}|Media Kit>`,
+        },
+      ],
+    },
+    {
+      type: 'context',
+      elements: [
+        {
+          type: 'mrkdwn',
+          text: '⚠️ *DRAFT ONLY — Review carefully before sending manually from Trevor\'s email.*',
         },
       ],
     },
@@ -517,7 +538,7 @@ function buildEmailBlock(podcastTitle, emailNumber, pitchData, podcastData) {
       elements: [
         {
           type: 'mrkdwn',
-          text: '✅ All 3 emails generated for this podcast.',
+          text: '✅ All 3 emails generated. Send manually from trevor@theartofhealingbytrevor.com',
         },
       ],
     });
@@ -528,8 +549,18 @@ function buildEmailBlock(podcastTitle, emailNumber, pitchData, podcastData) {
 
 // ── ROUTES ───────────────────────────────────────────────
 
+// Health check
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', message: 'Trevor AI Assistant is running' });
+  res.json({
+    status: 'ok',
+    message: 'Trevor AI Assistant is running',
+    guardrails: [
+      'Never auto-sends emails',
+      'All pitches are drafts for human review',
+      'Approve/Reject decisions stored in database',
+      'Claude learns from past decisions',
+    ],
+  });
 });
 
 // /asktrevorai
@@ -551,9 +582,10 @@ app.post('/slack/ask', async (req, res) => {
       `*${user_name} asked:* ${text}\n\n*Answer:*\n${answer}`
     );
   } catch (error) {
+    console.error('asktrevorai error:', error.message);
     await sendToSlack(
       response_url,
-      `❌ Something went wrong: ${error.message}`
+      `❌ Something went wrong.\n*Error:* ${error.message}\n_Screenshot this and send to your developer._`
     );
   }
 });
@@ -567,7 +599,8 @@ app.post('/slack/find_podcasts', async (req, res) => {
   if (!text?.trim()) {
     return res.json({
       response_type: 'ephemeral',
-      text: 'Please include keywords. Example: `/find_podcasts relationships attachment women`',
+      text:
+        'Please include keywords.\n\n*Example:* `/find_podcasts relationships attachment women`',
     });
   }
 
@@ -577,108 +610,98 @@ app.post('/slack/find_podcasts', async (req, res) => {
   });
 
   try {
-    // Fetch Apple charts and past decisions in parallel
-    const [appleCharts, rejectedPodcasts, pastDecisions] = await Promise.all([
-      fetchAppleCharts(),
-      db.getRejectedPodcasts(),
-      db.getPastDecisions(10),
-    ]);
+    const [appleCharts, rejectedPodcasts, pastDecisions, feedbackSummary] =
+      await Promise.all([
+        fetchAppleCharts(),
+        db.getRejectedPodcasts(),
+        db.getPastDecisions(10),
+        db.getFeedbackSummary(10),
+      ]);
 
     const appleChartsText = formatAppleChartsForClaude(appleCharts);
-    const allExcluded = [...TREVOR_CONTEXT.alreadyPitched, ...rejectedPodcasts];
-    const pastContext =
-      pastDecisions.length > 0
-        ? `\nPAST DECISIONS (learn from these):\n${pastDecisions
-            .map((d) => `- ${d.podcast_title}: ${d.decision}`)
-            .join('\n')}`
-        : '';
+    const allExcluded = [
+      ...TREVOR_CONTEXT.alreadyPitched,
+      ...rejectedPodcasts,
+    ];
+
+    // Build rich memory context for Claude
+    const memoryContext = buildMemoryContext(pastDecisions, feedbackSummary);
 
     const systemPrompt = `
 You are Trevor Hanson's podcast outreach assistant.
+
+GUARDRAILS — NEVER VIOLATE THESE:
+- You only find and evaluate podcasts. You do NOT send emails.
+- You only draft pitches for human review. Humans send them manually.
+- You do not access any external accounts or systems.
+- You do not store personal data beyond what is needed for this task.
 
 ABOUT TREVOR:
 ${TREVOR_CONTEXT.bio}
 
 TARGET SECTORS IN PRIORITY ORDER:
-1. Relationships and Dating — podcasts about relationships, dating, attachment, love
-2. Personal Development — self-improvement, mindset, success, entrepreneurship
-3. Young Successful Women and Christian Women — lifestyle, faith, women empowerment
+1. Relationships and Dating
+2. Personal Development
+3. Young Successful Women and Christian Women
 
 ${appleChartsText}
 
 APPLE CHART RANKING BONUS:
-If a podcast appears in the Apple Charts above add these bonus points to their score:
-- Ranked #1-10 on Apple Charts = +3 points
-- Ranked #11-25 on Apple Charts = +2 points
-- Ranked #26-50 on Apple Charts = +1 point
-- Not on Apple Charts = +0 points
+- Ranked #1-10 = +3 points
+- Ranked #11-25 = +2 points
+- Ranked #26-50 = +1 point
+- Not on charts = +0 points
 
-Also note their Apple Chart rank in the apple_chart_rank field.
-
-HOW TO EVALUATE PODCAST QUALITY (base score out of 7, plus Apple bonus):
+HOW TO SCORE PODCASTS (base out of 7 plus Apple bonus):
 
 EPISODE COUNT (up to 2 points):
-- 500+ episodes = 2 points
-- 200-499 episodes = 1.5 points
-- 100-199 episodes = 1 point
-- Under 100 episodes = 0.5 points
+- 500+ = 2 pts | 200-499 = 1.5 pts | 100-199 = 1 pt | Under 100 = 0.5 pts
 
 SHOW LONGEVITY (up to 1 point):
-- Running 4+ years = 1 point
-- Running 2-3 years = 0.5 points
-- Under 2 years = 0 points
+- 4+ years = 1 pt | 2-3 years = 0.5 pts | Under 2 years = 0 pts
 
-SOCIAL MEDIA AND AUDIENCE SIZE (up to 2 points):
-- Host has 100k+ followers on any platform = 2 points
-- Host has 50k-100k followers = 1.5 points
-- Host has 10k-50k followers = 1 point
-- Unknown or small = 0.5 points
+SOCIAL MEDIA (up to 2 points):
+- 100k+ followers = 2 pts | 50k-100k = 1.5 pts | 10k-50k = 1 pt | Unknown = 0.5 pts
 
 NICHE AUTHORITY (up to 1 point):
-- Is THE go-to show in their niche = 1 point
-- One of many similar shows = 0.5 points
+- THE go-to show = 1 pt | One of many = 0.5 pts
 
-AUDIENCE ALIGNMENT WITH TREVOR (up to 1 point):
-- Perfect match = 1 point
-- Good match = 0.5 points
-- Weak match = 0 points
+AUDIENCE ALIGNMENT (up to 1 point):
+- Perfect match = 1 pt | Good = 0.5 pts | Weak = 0 pts
 
-TOTAL = base score + Apple Chart bonus (max 10)
+ONLY include podcasts scoring 6 or above.
 
-ONLY return podcasts scoring 6 or above.
-Prioritize any podcast appearing in the Apple Charts.
+${memoryContext}
 
 CONTACT EMAIL:
-For each podcast find the most likely contact or booking email.
-Common patterns: hello@, contact@, booking@, pitch@, podcast@, info@
+Find the most likely booking/contact email for each podcast.
 If unknown write: "Not found — check [website]/contact"
 
 PODCASTS TO EXCLUDE:
 ${allExcluded.join(', ')}
-${pastContext}
 
 YOUR JOB:
 1. Search for podcasts matching the keywords
-2. Cross-reference with Apple Charts above
+2. Cross-reference with Apple Charts
 3. Score each podcast
-4. Only include podcasts scoring 6 or above
-5. Find contact email for each
+4. Only include scores 6 or above
+5. Find contact emails
 6. Return top 5 sorted by score
 
-CRITICAL: Return pure JSON array only. No backticks. No markdown. No code blocks. Just raw JSON.
+CRITICAL: Return pure JSON array only. No backticks. No markdown. No extra text.
 
 [
   {
     "title": "podcast name",
     "website": "url",
     "description": "2-3 sentences about the podcast",
-    "audience": "Who listens. Age, interests, values. 1-2 sentences.",
-    "summary": "Why Trevor fits this specific podcast. 2-3 sentences.",
+    "audience": "Who listens. 1-2 sentences.",
+    "summary": "Why Trevor fits. Be specific. 2-3 sentences.",
     "total_episodes": 250,
     "quality_score": 8,
     "score_breakdown": "Episodes: 1.5 | Longevity: 1 | Social: 2 | Authority: 1 | Alignment: 1 | Apple Bonus: 2",
     "years_running": "5 years",
-    "notable_guests": "Brene Brown, Matthew Hussey",
+    "notable_guests": "Guest names here",
     "host_social_following": "150k Instagram",
     "apple_chart_rank": 15,
     "contact_email": "contact@podcastname.com",
@@ -689,32 +712,29 @@ CRITICAL: Return pure JSON array only. No backticks. No markdown. No code blocks
     `.trim();
 
     const claudeResponse = await askClaudeWithTools(
-      `Search for podcasts matching: "${text}". 
-       Cross-reference results with the Apple Charts provided. 
-       Prioritize any podcast appearing in the Apple Charts.
-       Score each podcast and only return those scoring 6 or above.
+      `Search for podcasts matching: "${text}".
+       Cross-reference with Apple Charts.
+       Score each podcast and only return scores 6 or above.
        Find contact emails.
-       Return top 5 results as pure JSON array with no backticks or markdown.`,
+       Return top 5 as pure JSON array. No backticks. No markdown.`,
       systemPrompt
     );
 
-    // Clean response and parse JSON
     let podcasts = [];
     try {
       const cleaned = claudeResponse
         .replace(/```json/g, '')
         .replace(/```/g, '')
         .trim();
-
       const jsonMatch = cleaned.match(/\[[\s\S]*\]/);
       if (jsonMatch) {
         podcasts = JSON.parse(jsonMatch[0]);
         console.log(`Claude returned ${podcasts.length} podcasts`);
       } else {
-        console.error('No JSON found. Claude returned:', cleaned.slice(0, 500));
+        console.error('No JSON found. Claude returned:', cleaned.slice(0, 300));
         await sendToSlack(
           response_url,
-          `❌ No results found for "${text}". Try different keywords.`
+          `❌ No results found for "${text}".\n\nTry different keywords like:\n• \`/find_podcasts relationships\`\n• \`/find_podcasts personal development women\``
         );
         return;
       }
@@ -722,7 +742,7 @@ CRITICAL: Return pure JSON array only. No backticks. No markdown. No code blocks
       console.error('JSON parse error:', e.message);
       await sendToSlack(
         response_url,
-        `❌ Error parsing results. Please try again with different keywords.`
+        `❌ Error processing results.\n*Error:* ${e.message}\n_Screenshot this and send to your developer._`
       );
       return;
     }
@@ -746,8 +766,8 @@ CRITICAL: Return pure JSON array only. No backticks. No markdown. No code blocks
       return;
     }
 
-    // Count how many are on Apple Charts
     const appleCount = podcasts.filter((p) => p.apple_chart_rank).length;
+    const stats = await db.getStats();
 
     const headerBlocks = [
       {
@@ -764,18 +784,26 @@ CRITICAL: Return pure JSON array only. No backticks. No markdown. No code blocks
           type: 'mrkdwn',
           text:
             `Found *${podcasts.length} quality podcasts* for Trevor` +
-            (appleCount > 0 ? ` — *${appleCount} appear on Apple Charts today* 🍎` : '') +
-            `\n\n*Quality Score Guide:*\n` +
-            `🏆 9-10 — Elite (Apple Charts + high score)\n` +
+            (appleCount > 0
+              ? ` — *${appleCount} on Apple Charts today* 🍎`
+              : '') +
+            `\n\n` +
+            `*Quality Score Guide:*\n` +
+            `🏆 9-10 — Elite (Apple Charts + top show)\n` +
             `⭐ 7-8 — Excellent fit\n` +
             `✅ 6 — Good fit\n\n` +
-            `Click *✅ Approve* to generate a pitch or *❌ Reject* to dismiss.`,
+            `*Database memory:* ${stats.total_approved} approved | ${stats.total_rejected} rejected | Claude learns from all of these.\n\n` +
+            `Click *✅ Approve* to generate a pitch draft or *❌ Reject* to dismiss.\n` +
+            `⚠️ _Pitches are drafts only — nothing sends automatically._`,
         },
       },
     ];
 
-    const podcastBlocks = podcasts.flatMap((p, i) => buildPodcastBlock(p, i));
-    const channel = process.env.SLACK_PODCAST_CHANNEL || '#find-podcasts';
+    const podcastBlocks = podcasts.flatMap((p, i) =>
+      buildPodcastBlock(p, i)
+    );
+    const channel =
+      process.env.SLACK_PODCAST_CHANNEL || '#find-podcasts';
 
     await postToSlackChannel(
       channel,
@@ -788,8 +816,11 @@ CRITICAL: Return pure JSON array only. No backticks. No markdown. No code blocks
       `✅ Results posted to ${channel} — ${podcasts.length} podcasts found!`
     );
   } catch (error) {
-    console.error('Error:', error.message);
-    await sendToSlack(response_url, `❌ Search failed: ${error.message}`);
+    console.error('find_podcasts error:', error.message);
+    await sendToSlack(
+      response_url,
+      `❌ Search failed.\n*Error:* ${error.message}\n_Screenshot this and send to your developer._`
+    );
   }
 });
 
@@ -810,7 +841,7 @@ app.post('/slack/actions', async (req, res) => {
   const channelId = payload.channel.id;
   const userName = payload.user.username;
 
-  // ── REJECT ───────────────────────────────────────────
+  // ── REJECT ──────────────────────────────────────────
   if (actionId === 'reject_podcast') {
     const podcastData = JSON.parse(action.value);
 
@@ -825,6 +856,18 @@ app.post('/slack/actions', async (req, res) => {
       keywordsSearched: '',
     });
 
+    // Save detailed feedback
+    await db.saveFeedback({
+      podcastTitle: podcastData.title,
+      podcastWebsite: podcastData.website || '',
+      podcastAudience: podcastData.audience || '',
+      decision: 'rejected',
+      qualityScore: podcastData.listen_score || 0,
+      keywordsSearched: '',
+      rejectionReason: 'Manually rejected by team',
+      decidedBy: userName,
+    });
+
     await postToSlackChannel(
       channelId,
       [
@@ -832,7 +875,7 @@ app.post('/slack/actions', async (req, res) => {
           type: 'section',
           text: {
             type: 'mrkdwn',
-            text: `❌ *${podcastData.title}* rejected by ${userName} and saved to database.`,
+            text: `❌ *${podcastData.title}* rejected by ${userName}.\n_Saved to database — Claude will not suggest this again._`,
           },
         },
       ],
@@ -855,6 +898,18 @@ app.post('/slack/actions', async (req, res) => {
       keywordsSearched: '',
     });
 
+    // Save detailed feedback
+    await db.saveFeedback({
+      podcastTitle: podcastData.title,
+      podcastWebsite: podcastData.website || '',
+      podcastAudience: podcastData.audience || '',
+      decision: 'approved',
+      qualityScore: podcastData.listen_score || 0,
+      keywordsSearched: '',
+      approvalNotes: 'Manually approved by team',
+      decidedBy: userName,
+    });
+
     await postToSlackChannel(
       channelId,
       [
@@ -862,7 +917,7 @@ app.post('/slack/actions', async (req, res) => {
           type: 'section',
           text: {
             type: 'mrkdwn',
-            text: `✅ *${podcastData.title}* approved by ${userName}!\n⏳ Generating Email 1...`,
+            text: `✅ *${podcastData.title}* approved by ${userName}!\n⏳ Generating Email 1 draft...`,
           },
         },
       ],
@@ -879,7 +934,11 @@ app.post('/slack/actions', async (req, res) => {
         null
       );
 
-      await db.savePitchEmail(podcastData.title, 1, pitchData.email_content);
+      await db.savePitchEmail(
+        podcastData.title,
+        1,
+        pitchData.email_content
+      );
       const emailBlocks = buildEmailBlock(
         podcastData.title,
         1,
@@ -900,7 +959,7 @@ app.post('/slack/actions', async (req, res) => {
             type: 'section',
             text: {
               type: 'mrkdwn',
-              text: `❌ Could not generate pitch: ${error.message}`,
+              text: `❌ Could not generate pitch.\n*Error:* ${error.message}\n_Screenshot this and send to your developer._`,
             },
           },
         ],
@@ -921,7 +980,7 @@ app.post('/slack/actions', async (req, res) => {
           type: 'section',
           text: {
             type: 'mrkdwn',
-            text: `⏳ Generating Email ${emailNumber} for *${title}*...`,
+            text: `⏳ Generating Email ${emailNumber} draft for *${title}*...`,
           },
         },
       ],
@@ -939,7 +998,12 @@ app.post('/slack/actions', async (req, res) => {
       );
 
       await db.savePitchEmail(title, emailNumber, pitchData.email_content);
-      const emailBlocks = buildEmailBlock(title, emailNumber, pitchData, data);
+      const emailBlocks = buildEmailBlock(
+        title,
+        emailNumber,
+        pitchData,
+        data
+      );
       await postToSlackChannel(
         channelId,
         emailBlocks,
@@ -954,7 +1018,7 @@ app.post('/slack/actions', async (req, res) => {
             type: 'section',
             text: {
               type: 'mrkdwn',
-              text: `❌ Could not generate Email ${emailNumber}: ${error.message}`,
+              text: `❌ Could not generate Email ${emailNumber}.\n*Error:* ${error.message}\n_Screenshot this and send to your developer._`,
             },
           },
         ],
@@ -964,7 +1028,56 @@ app.post('/slack/actions', async (req, res) => {
   }
 });
 
+// ── HELPER: BUILD MEMORY CONTEXT FOR CLAUDE ──────────────
+function buildMemoryContext(pastDecisions, feedbackSummary) {
+  let context = '\nMEMORY — WHAT CLAUDE HAS LEARNED FROM PAST DECISIONS:\n';
+
+  if (pastDecisions.length === 0 && feedbackSummary.length === 0) {
+    context += 'No past decisions yet. This is a fresh start.\n';
+    return context;
+  }
+
+  if (pastDecisions.length > 0) {
+    context += '\nRecent decisions:\n';
+    pastDecisions.forEach((d) => {
+      context += `- ${d.podcast_title}: ${d.decision.toUpperCase()}`;
+      if (d.keywords_searched) {
+        context += ` (searched: ${d.keywords_searched})`;
+      }
+      context += '\n';
+    });
+  }
+
+  if (feedbackSummary.length > 0) {
+    const approved = feedbackSummary.filter((f) => f.decision === 'approved');
+    const rejected = feedbackSummary.filter((f) => f.decision === 'rejected');
+
+    if (approved.length > 0) {
+      context += '\nApproved podcasts had these audience types:\n';
+      approved.forEach((f) => {
+        if (f.podcast_audience) {
+          context += `- ${f.podcast_title}: ${f.podcast_audience}\n`;
+        }
+      });
+    }
+
+    if (rejected.length > 0) {
+      context += '\nRejected podcasts — do not suggest similar:\n';
+      rejected.forEach((f) => {
+        context += `- ${f.podcast_title}`;
+        if (f.rejection_reason) context += `: ${f.rejection_reason}`;
+        context += '\n';
+      });
+    }
+  }
+
+  context +=
+    '\nUse this history to better predict what the team will approve or reject.\n';
+  return context;
+}
+
 // ── START ────────────────────────────────────────────────
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+  console.log('Guardrails active: No auto-sending. Drafts only.');
 });
