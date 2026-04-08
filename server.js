@@ -64,7 +64,7 @@ async function fetchAppleCharts() {
   const results = {};
   for (const [category, id] of Object.entries(APPLE_CHART_CATEGORIES)) {
     try {
-      const url = `https://rss.applemarketingtools.com/api/v2/us/podcasts/top/200/${id}/podcasts.json`;
+      const url = `https://rss.applemarketingtools.com/api/v2/us/podcasts/top/50/${id}/podcasts.json`;
       const response = await axios.get(url, {
         timeout: 10000,
         headers: { 'User-Agent': 'Mozilla/5.0 (compatible; PodcastBot/1.0)' },
@@ -894,9 +894,10 @@ APPLE RATINGS BONUS: up to +1.5 points
 
 MAXIMUM SCORE: 11.5 (display as capped at 10)
 
-ONLY include podcasts scoring 6 or above.
-Podcasts on Apple Top 200 automatically qualify if base score is 5+.
-Tiers 3 and 4 podcasts get a +0.5 priority bonus if close to threshold.
+ONLY include podcasts scoring 5.5 or above.
+Podcasts on Apple Top 50 charts automatically qualify if base score is 4.5+.
+Tiers 3 and 4 (high achievers, entrepreneurship) get a +0.5 priority bonus.
+If fewer than 5 podcasts qualify lower your threshold slightly to fill spots.
 
 CONTACT EMAIL PRIORITY:
 1. Use contact_email from Podchaser data if available
@@ -987,10 +988,10 @@ CRITICAL: Return pure JSON array only. No backticks. No markdown. No extra text.
       return;
     }
 
-    // Safety filters
+  // Safety filters
     podcasts = podcasts.filter((p) => {
       const score = p.quality_score || 0;
-      if (score < 6) {
+      if (score < 5.5) {
         console.log(`Filtered out (score ${score}): ${p.title}`);
         return false;
       }
@@ -1005,7 +1006,7 @@ CRITICAL: Return pure JSON array only. No backticks. No markdown. No extra text.
     if (podcasts.length === 0) {
       await sendToSlack(
         response_url,
-        `No qualifying podcasts found for *"${text}"*.\n\nTry:\n• \`/find_podcasts relationships attachment\`\n• \`/find_podcasts high achievers struggling in relationships\`\n• \`/find_podcasts entrepreneurship personal growth emotional intelligence\`\n• \`/find_podcasts self development mindset success\``
+        `No qualifying podcasts found for *"${text}"*.\n\nThis usually means the search terms were too specific. Try:\n• \`/find_podcasts entrepreneurship success\`\n• \`/find_podcasts high achievers relationships\`\n• \`/find_podcasts mindset success personal growth\`\n• \`/find_podcasts relationships attachment\`\n• \`/find_podcasts self improvement confidence\``
       );
       return;
     }
