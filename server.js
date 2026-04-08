@@ -49,7 +49,7 @@ function verifySlackRequest(req) {
   }
 }
 
-// ── FETCH APPLE PODCAST CHARTS — TOP 200 ─────────────────
+// ── FETCH APPLE PODCAST CHARTS ───────────────────────────
 const APPLE_CHART_CATEGORIES = {
   relationships: '1528997175',
   personal_development: '1527223741',
@@ -74,11 +74,8 @@ async function fetchAppleCharts() {
           rank: index + 1,
           name: p.name,
           artistName: p.artistName,
-          url: p.url,
         }));
-        console.log(
-          `Apple charts fetched for ${category}: ${results[category].length} podcasts`
-        );
+        console.log(`Apple charts fetched for ${category}: ${results[category].length}`);
       }
     } catch (err) {
       console.error(`Apple charts error for ${category}:`, err.message);
@@ -89,7 +86,7 @@ async function fetchAppleCharts() {
 }
 
 function formatAppleChartsForClaude(charts) {
-  let text = 'APPLE PODCAST CHARTS TOP 200 (fetched today):\n\n';
+  let text = 'APPLE PODCAST CHARTS TOP 50 (fetched today):\n\n';
   for (const [category, podcasts] of Object.entries(charts)) {
     if (podcasts.length === 0) continue;
     text += `${category.toUpperCase()} TOP ${podcasts.length}:\n`;
@@ -149,13 +146,9 @@ async function searchPodchaser(keywords, maxResults = 10) {
             title
             description
             webUrl
-            author {
-              name
-            }
+            author { name }
             episodes(first: 1) {
-              paginatorInfo {
-                total
-              }
+              paginatorInfo { total }
             }
           }
         }
@@ -221,7 +214,7 @@ async function search_podcasts({ keywords, max_results = 10 }) {
 
   console.log(
     `Combined: ${listenNotesResults.length} ListenNotes + ` +
-      `${podchaserResults.length} Podchaser = ${allResults.length} unique results`
+    `${podchaserResults.length} Podchaser = ${allResults.length} unique`
   );
 
   return { podcasts: allResults };
@@ -231,18 +224,12 @@ async function search_podcasts({ keywords, max_results = 10 }) {
 const tools = [
   {
     name: 'search_podcasts',
-    description:
-      'Search for podcasts using both ListenNotes and Podchaser APIs combined. ' +
-      'Returns deduplicated results from both sources. ' +
-      'Podchaser results may include contact emails found in descriptions.',
+    description: 'Search podcasts using ListenNotes and Podchaser combined.',
     input_schema: {
       type: 'object',
       properties: {
         keywords: { type: 'string', description: 'Search keywords' },
-        max_results: {
-          type: 'number',
-          description: 'Number of results per source. Default 10.',
-        },
+        max_results: { type: 'number', description: 'Results per source. Default 10.' },
       },
       required: ['keywords'],
     },
@@ -251,9 +238,7 @@ const tools = [
 
 // ── CLAUDE WITH TOOL CALLING ─────────────────────────────
 async function askClaudeWithTools(userMessage, systemPrompt) {
-  const client = new Anthropic.Anthropic({
-    apiKey: process.env.ANTHROPIC_API_KEY,
-  });
+  const client = new Anthropic.Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
   const messages = [{ role: 'user', content: userMessage }];
 
   let response = await client.messages.create({
@@ -270,10 +255,9 @@ async function askClaudeWithTools(userMessage, systemPrompt) {
 
     let toolResult;
     try {
-      toolResult =
-        toolUseBlock.name === 'search_podcasts'
-          ? await search_podcasts(toolUseBlock.input)
-          : { error: `Unknown tool: ${toolUseBlock.name}` };
+      toolResult = toolUseBlock.name === 'search_podcasts'
+        ? await search_podcasts(toolUseBlock.input)
+        : { error: `Unknown tool: ${toolUseBlock.name}` };
     } catch (err) {
       toolResult = { error: err.message };
     }
@@ -281,13 +265,11 @@ async function askClaudeWithTools(userMessage, systemPrompt) {
     messages.push({ role: 'assistant', content: response.content });
     messages.push({
       role: 'user',
-      content: [
-        {
-          type: 'tool_result',
-          tool_use_id: toolUseBlock.id,
-          content: JSON.stringify(toolResult),
-        },
-      ],
+      content: [{
+        type: 'tool_result',
+        tool_use_id: toolUseBlock.id,
+        content: JSON.stringify(toolResult),
+      }],
     });
 
     response = await client.messages.create({
@@ -305,15 +287,13 @@ async function askClaudeWithTools(userMessage, systemPrompt) {
 
 // ── BASIC CLAUDE ─────────────────────────────────────────
 async function askClaude(userMessage) {
-  const client = new Anthropic.Anthropic({
-    apiKey: process.env.ANTHROPIC_API_KEY,
-  });
+  const client = new Anthropic.Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
   const response = await client.messages.create({
     model: 'claude-opus-4-5',
     max_tokens: 1024,
     system:
       'You are a helpful assistant in a Slack workspace. Keep answers concise. ' +
-      'GUARDRAIL: Never send emails or take any external action. Only provide information and drafts.',
+      'GUARDRAIL: Never send emails or take external actions. Drafts only.',
     messages: [{ role: 'user', content: userMessage }],
   });
   return response.content[0].text;
@@ -321,16 +301,10 @@ async function askClaude(userMessage) {
 
 // ── GENERATE PITCH EMAIL ─────────────────────────────────
 async function generatePitchEmail(
-  podcastName,
-  podcastDescription,
-  podcastAudience,
-  emailNumber,
-  hostName,
-  chosenAngle
+  podcastName, podcastDescription, podcastAudience,
+  emailNumber, hostName, chosenAngle
 ) {
-  const client = new Anthropic.Anthropic({
-    apiKey: process.env.ANTHROPIC_API_KEY,
-  });
+  const client = new Anthropic.Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
   const anglesText = TREVOR_CONTEXT.pitchAngles
     .map((a) => `${a.id}: "${a.topic}" (Best for: ${a.bestFor})`)
@@ -338,27 +312,17 @@ async function generatePitchEmail(
 
   let template = '';
   if (emailNumber === 1) {
-    template = TREVOR_CONTEXT.pitchTemplates.email1(
-      '[HOST_NAME]',
-      '[SPECIFIC_TO_PODCAST]'
-    );
+    template = TREVOR_CONTEXT.pitchTemplates.email1('[HOST_NAME]', '[SPECIFIC_TO_PODCAST]');
   } else if (emailNumber === 2) {
-    template = TREVOR_CONTEXT.pitchTemplates.email2(
-      '[HOST_NAME]',
-      '[EPISODE_TOPIC_ANGLE]'
-    );
+    template = TREVOR_CONTEXT.pitchTemplates.email2('[HOST_NAME]', '[EPISODE_TOPIC_ANGLE]');
   } else if (emailNumber === 3) {
-    template = TREVOR_CONTEXT.pitchTemplates.email3(
-      '[HOST_NAME]',
-      '[EPISODE_TOPIC_ANGLE]'
-    );
+    template = TREVOR_CONTEXT.pitchTemplates.email3('[HOST_NAME]', '[EPISODE_TOPIC_ANGLE]');
   }
 
   const prompt = `
-GUARDRAIL: You are drafting a pitch email for human review only.
-This email will NOT be sent automatically. A human must review and send it manually.
+GUARDRAIL: Draft for human review only. Will NOT be sent automatically.
 
-You are helping Trevor Hanson pitch himself as a podcast guest on "${podcastName}".
+Help Trevor Hanson pitch himself as a guest on "${podcastName}".
 
 Podcast description: ${podcastDescription}
 Podcast audience: ${podcastAudience || 'Not specified'}
@@ -366,26 +330,25 @@ Host name: ${hostName || podcastName}
 Email number: ${emailNumber}
 ${chosenAngle ? `Previously chosen angle: ${chosenAngle}` : ''}
 
-Available pitch angles:
+Available angles:
 ${anglesText}
 
 Instructions:
-- For Email 1: Replace [HOST_NAME] with the host name. Replace [SPECIFIC_TO_PODCAST] with 8-12 words describing what this podcast helps listeners with.
-- For Email 2 and 3: Replace [HOST_NAME] with the host name. Replace [EPISODE_TOPIC_ANGLE] with the chosen angle topic.
-- Keep EVERYTHING else exactly as written. Do not change any other text.
-- Match Trevor's voice: warm, direct, confident but not arrogant.
-- Do not add commentary before or after the email.
+- Email 1: Replace [HOST_NAME] and [SPECIFIC_TO_PODCAST] (8-12 words)
+- Email 2 and 3: Replace [HOST_NAME] and [EPISODE_TOPIC_ANGLE]
+- Keep everything else exactly as written
+- Match Trevor's voice: warm, direct, confident
 
-Return a JSON object with no backticks and no markdown:
+Return JSON only — no backticks no markdown:
 {
-  "chosen_angle": "angle_id here",
-  "angle_topic": "full angle topic text",
-  "specific_to_podcast": "the 8-12 word phrase for email 1",
-  "host_name": "the host name used",
-  "email_content": "the complete finished email with all links intact"
+  "chosen_angle": "angle_id",
+  "angle_topic": "full topic text",
+  "specific_to_podcast": "8-12 word phrase",
+  "host_name": "host name used",
+  "email_content": "complete email with all links"
 }
 
-Template to fill in:
+Template:
 ${template}
   `.trim();
 
@@ -404,11 +367,7 @@ ${template}
   } catch (e) {
     console.error('Could not parse pitch JSON:', e.message);
   }
-  return {
-    email_content: text,
-    chosen_angle: 'angle_1',
-    host_name: hostName || podcastName,
-  };
+  return { email_content: text, chosen_angle: 'angle_1', host_name: hostName || podcastName };
 }
 
 // ── SEND TO SLACK ────────────────────────────────────────
@@ -442,8 +401,7 @@ function buildPodcastBlock(podcast, index) {
   else if (score >= 7) scoreEmoji = '⭐';
 
   const appleBadge = podcast.apple_chart_rank
-    ? ` | 🍎 Apple #${podcast.apple_chart_rank}`
-    : '';
+    ? ` | 🍎 Apple #${podcast.apple_chart_rank}` : '';
 
   const email = podcast.contact_email &&
     podcast.contact_email !== 'Not found'
@@ -454,7 +412,6 @@ function buildPodcastBlock(podcast, index) {
     (t) => t.tier === podcast.tier
   )?.name || 'General';
 
-  // Build one clean text block — avoids invalid_blocks errors
   const cardText = [
     `*${index + 1}. ${podcast.title}*${appleBadge}`,
     ``,
@@ -462,24 +419,30 @@ function buildPodcastBlock(podcast, index) {
     `🌐 *Website:* ${(podcast.website || 'N/A').slice(0, 100)}`,
     `🎙️ *Episodes:* ${podcast.total_episodes || 'N/A'} (${podcast.years_running || 'Unknown'})`,
     `📱 *Host Following:* ${(podcast.host_social_following || 'Unknown').slice(0, 100)}`,
-    `🍎 *Apple:* ${(podcast.apple_rating || 'Unknown')} — ${(podcast.apple_review_count || 'Unknown reviews')}`,
+    `🍎 *Apple:* ${podcast.apple_rating || 'Unknown'} — ${podcast.apple_review_count || 'Unknown reviews'}`,
     `📧 *Contact:* ${email.slice(0, 150)}`,
     ``,
     `👥 *Audience:* ${(podcast.audience || 'N/A').slice(0, 200)}`,
     ``,
     `💡 *Why Trevor fits:* ${(podcast.summary || podcast.description || '').slice(0, 250)}`,
     ``,
-    `📊 *Score:* ${(podcast.score_breakdown || 'N/A').slice(0, 150)}`,
+    `📊 *Score breakdown:* ${(podcast.score_breakdown || 'N/A').slice(0, 150)}`,
   ].join('\n');
+
+  // Encode podcast data for button values
+  const podcastValue = JSON.stringify({
+    title: podcast.title,
+    website: (podcast.website || '').slice(0, 100),
+    description: (podcast.description || '').slice(0, 300),
+    audience: (podcast.audience || '').slice(0, 200),
+    listen_score: podcast.quality_score || 0,
+  });
 
   return [
     { type: 'divider' },
     {
       type: 'section',
-      text: {
-        type: 'mrkdwn',
-        text: cardText,
-      },
+      text: { type: 'mrkdwn', text: cardText },
     },
     {
       type: 'actions',
@@ -490,26 +453,131 @@ function buildPodcastBlock(podcast, index) {
           text: { type: 'plain_text', text: '✅ Approve', emoji: true },
           style: 'primary',
           action_id: 'approve_podcast',
-          value: JSON.stringify({
-            title: podcast.title,
-            website: podcast.website,
-            description: (podcast.description || '').slice(0, 500),
-            audience: (podcast.audience || '').slice(0, 300),
-            listen_score: podcast.quality_score || 0,
-          }),
+          value: podcastValue,
         },
         {
           type: 'button',
           text: { type: 'plain_text', text: '❌ Reject', emoji: true },
           style: 'danger',
-          action_id: 'reject_podcast',
-          value: JSON.stringify({
-            title: podcast.title,
-            website: podcast.website || '',
-            description: (podcast.description || '').slice(0, 200),
-            audience: (podcast.audience || '').slice(0, 200),
-            listen_score: podcast.quality_score || 0,
-          }),
+          action_id: 'reject_podcast_start',
+          value: podcastValue,
+        },
+      ],
+    },
+  ];
+}
+
+// ── BUILD REJECT REASON FORM ─────────────────────────────
+// Shows after clicking Reject — inline form with dropdown + text input
+function buildRejectReasonForm(podcastTitle, podcastValue) {
+  return [
+    { type: 'divider' },
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `❌ *Rejecting: ${podcastTitle}*\nPlease select a reason and add details:`,
+      },
+    },
+    {
+      type: 'actions',
+      block_id: `reject_reason_${Date.now()}`,
+      elements: [
+        {
+          type: 'static_select',
+          placeholder: { type: 'plain_text', text: 'Select reason...' },
+          action_id: 'reject_reason_select',
+          options: [
+            { text: { type: 'plain_text', text: '📉 Too small / low reach' }, value: 'Too small' },
+            { text: { type: 'plain_text', text: '🎯 Wrong niche / audience' }, value: 'Wrong niche' },
+            { text: { type: 'plain_text', text: '🔁 Already pitched' }, value: 'Already pitched' },
+            { text: { type: 'plain_text', text: '👎 Low quality content' }, value: 'Low quality' },
+            { text: { type: 'plain_text', text: '📝 Other (see details)' }, value: 'Other' },
+          ],
+        },
+      ],
+    },
+    {
+      type: 'input',
+      block_id: `reject_details_${Date.now()}`,
+      element: {
+        type: 'plain_text_input',
+        action_id: 'reject_details_input',
+        placeholder: {
+          type: 'plain_text',
+          text: 'Add details — Claude learns from this. Be specific.',
+        },
+        multiline: true,
+      },
+      label: { type: 'plain_text', text: 'Details (required)' },
+      hint: {
+        type: 'plain_text',
+        text: 'Example: "Host has under 5k followers, too small for our goals"',
+      },
+    },
+    {
+      type: 'actions',
+      block_id: `reject_submit_${Date.now()}`,
+      elements: [
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: '✔️ Confirm Rejection', emoji: true },
+          style: 'danger',
+          action_id: 'reject_confirm',
+          value: podcastValue,
+        },
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: '↩️ Cancel', emoji: true },
+          action_id: 'reject_cancel',
+          value: podcastTitle,
+        },
+      ],
+    },
+  ];
+}
+
+// ── BUILD APPROVE NOTES FORM ─────────────────────────────
+// Shows after approve — optional notes for Claude
+function buildApproveNotesForm(podcastTitle) {
+  return [
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `💬 *Optional:* Add notes for Claude about why *${podcastTitle}* was approved.\n_This helps Claude find similar podcasts in the future._`,
+      },
+    },
+    {
+      type: 'input',
+      block_id: `approve_notes_block`,
+      optional: true,
+      element: {
+        type: 'plain_text_input',
+        action_id: 'approve_notes_input',
+        placeholder: {
+          type: 'plain_text',
+          text: 'e.g. "Great audience of high-achieving women, host is very engaged"',
+        },
+        multiline: false,
+      },
+      label: { type: 'plain_text', text: 'Approval notes (optional)' },
+    },
+    {
+      type: 'actions',
+      elements: [
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: '💾 Save Notes', emoji: true },
+          style: 'primary',
+          action_id: 'approve_notes_submit',
+          value: podcastTitle,
+        },
+        {
+          type: 'button',
+          text: { type: 'plain_text', text: 'Skip', emoji: true },
+          action_id: 'approve_notes_skip',
+          value: podcastTitle,
         },
       ],
     },
@@ -526,41 +594,30 @@ function buildEmailBlock(podcastTitle, emailNumber, pitchData, podcastData) {
       type: 'header',
       text: {
         type: 'plain_text',
-        text: `📧 Email ${emailNumber} — Pitch for ${podcastTitle}`,
+        text: `📧 Email ${emailNumber} — ${podcastTitle.slice(0, 40)}`,
         emoji: true,
       },
     },
     {
       type: 'section',
       fields: [
-        {
-          type: 'mrkdwn',
-          text: `*From:*\ntrevor@theartofhealingbytrevor.com`,
-        },
-        { type: 'mrkdwn', text: `*To:*\n${podcastTitle}` },
+        { type: 'mrkdwn', text: `*From:*\ntrevor@theartofhealingbytrevor.com` },
+        { type: 'mrkdwn', text: `*To:*\n${podcastTitle.slice(0, 50)}` },
       ],
     },
     {
       type: 'section',
       fields: [
-        {
-          type: 'mrkdwn',
-          text: `*Angle:*\n${pitchData.angle_topic || 'Default angle'}`,
-        },
-        {
-          type: 'mrkdwn',
-          text: `*Attach:*\n<${TREVOR_CONTEXT.links.mediaKit}|Media Kit>`,
-        },
+        { type: 'mrkdwn', text: `*Angle:*\n${(pitchData.angle_topic || 'Default').slice(0, 100)}` },
+        { type: 'mrkdwn', text: `*Attach:*\n<${TREVOR_CONTEXT.links.mediaKit}|Media Kit>` },
       ],
     },
     {
       type: 'context',
-      elements: [
-        {
-          type: 'mrkdwn',
-          text: "⚠️ *DRAFT ONLY — Review carefully before sending manually from Trevor's email.*",
-        },
-      ],
+      elements: [{
+        type: 'mrkdwn',
+        text: "⚠️ *DRAFT ONLY — Review before sending manually from Trevor's email.*",
+      }],
     },
     {
       type: 'section',
@@ -574,38 +631,34 @@ function buildEmailBlock(podcastTitle, emailNumber, pitchData, podcastData) {
   if (hasNextEmail) {
     blocks.push({
       type: 'actions',
-      elements: [
-        {
-          type: 'button',
-          text: {
-            type: 'plain_text',
-            text: `📧 Generate Email ${nextEmailNumber} — Follow-up ${nextEmailNumber === 2 ? '(Day 7)' : '(Day 14)'}`,
-            emoji: true,
-          },
-          style: 'primary',
-          action_id: 'generate_next_email',
-          value: JSON.stringify({
-            title: podcastData.title,
-            website: podcastData.website,
-            description: podcastData.description,
-            audience: podcastData.audience,
-            emailNumber: nextEmailNumber,
-            hostName: pitchData.host_name,
-            chosenAngle: pitchData.chosen_angle,
-            angleTopic: pitchData.angle_topic,
-          }),
+      elements: [{
+        type: 'button',
+        text: {
+          type: 'plain_text',
+          text: `📧 Generate Email ${nextEmailNumber} — Follow-up ${nextEmailNumber === 2 ? '(Day 7)' : '(Day 14)'}`,
+          emoji: true,
         },
-      ],
+        style: 'primary',
+        action_id: 'generate_next_email',
+        value: JSON.stringify({
+          title: podcastData.title,
+          website: podcastData.website,
+          description: (podcastData.description || '').slice(0, 300),
+          audience: (podcastData.audience || '').slice(0, 200),
+          emailNumber: nextEmailNumber,
+          hostName: pitchData.host_name,
+          chosenAngle: pitchData.chosen_angle,
+          angleTopic: pitchData.angle_topic,
+        }),
+      }],
     });
   } else {
     blocks.push({
       type: 'context',
-      elements: [
-        {
-          type: 'mrkdwn',
-          text: '✅ All 3 emails generated. Send manually from trevor@theartofhealingbytrevor.com',
-        },
-      ],
+      elements: [{
+        type: 'mrkdwn',
+        text: '✅ All 3 emails generated. Send manually from trevor@theartofhealingbytrevor.com',
+      }],
     });
   }
 
@@ -613,20 +666,18 @@ function buildEmailBlock(podcastTitle, emailNumber, pitchData, podcastData) {
 }
 
 // ── HELPER: BUILD MEMORY CONTEXT FOR CLAUDE ──────────────
-function buildMemoryContext(pastDecisions, feedbackSummary) {
-  let context = '\nMEMORY — WHAT CLAUDE HAS LEARNED FROM PAST DECISIONS:\n';
+function buildMemoryContext(pastDecisions, feedbackSummary, generalFeedback) {
+  let context = '\nMEMORY — LEARNED FROM PAST DECISIONS:\n';
 
-  if (pastDecisions.length === 0 && feedbackSummary.length === 0) {
-    context += 'No past decisions yet. This is a fresh start.\n';
+  if (pastDecisions.length === 0 && feedbackSummary.length === 0 && generalFeedback.length === 0) {
+    context += 'No past decisions yet.\n';
     return context;
   }
 
   if (pastDecisions.length > 0) {
     context += '\nRecent decisions:\n';
     pastDecisions.forEach((d) => {
-      context += `- ${d.podcast_title}: ${d.decision.toUpperCase()}`;
-      if (d.keywords_searched) context += ` (searched: ${d.keywords_searched})`;
-      context += '\n';
+      context += `- ${d.podcast_title}: ${d.decision.toUpperCase()}\n`;
     });
   }
 
@@ -635,25 +686,41 @@ function buildMemoryContext(pastDecisions, feedbackSummary) {
     const rejected = feedbackSummary.filter((f) => f.decision === 'rejected');
 
     if (approved.length > 0) {
-      context += '\nApproved podcasts had these audience types:\n';
+      context += '\nApproved podcast notes:\n';
       approved.forEach((f) => {
-        if (f.podcast_audience) {
-          context += `- ${f.podcast_title}: ${f.podcast_audience}\n`;
-        }
+        if (f.approval_notes) context += `- ${f.podcast_title}: ${f.approval_notes}\n`;
       });
     }
 
     if (rejected.length > 0) {
-      context += '\nRejected podcasts — do not suggest similar:\n';
+      context += '\nRejection patterns to avoid:\n';
+      const reasonCounts = {};
       rejected.forEach((f) => {
-        context += `- ${f.podcast_title}`;
-        if (f.rejection_reason) context += `: ${f.rejection_reason}`;
-        context += '\n';
+        if (f.rejection_reason) {
+          reasonCounts[f.rejection_reason] = (reasonCounts[f.rejection_reason] || 0) + 1;
+        }
+      });
+      Object.entries(reasonCounts).forEach(([reason, count]) => {
+        context += `- "${reason}" rejected ${count} times\n`;
+      });
+
+      // Include specific rejection details
+      rejected.slice(0, 5).forEach((f) => {
+        if (f.rejection_reason && f.approval_notes) {
+          context += `- ${f.podcast_title}: ${f.rejection_reason} — ${f.approval_notes}\n`;
+        }
       });
     }
   }
 
-  context += '\nUse this history to better predict what the team will approve.\n';
+  if (generalFeedback.length > 0) {
+    context += '\nTeam feedback and preferences:\n';
+    generalFeedback.forEach((f) => {
+      context += `- [${f.category}] ${f.feedback_text}\n`;
+    });
+  }
+
+  context += '\nUse this to improve your suggestions.\n';
   return context;
 }
 
@@ -663,81 +730,57 @@ app.get('/', (req, res) => {
   res.json({
     status: 'ok',
     message: 'Trevor AI Assistant is running',
-    sources: ['ListenNotes', 'Podchaser'],
-    apple_charts: 'Top 200',
-    sectors: TREVOR_CONTEXT.tiers.map((t) => `Tier ${t.tier}: ${t.name}`),
-    guardrails: [
-      'Never auto-sends emails',
-      'All pitches are drafts for human review',
-      'English only filter active',
-      'Minimum 50 Apple reviews threshold',
-    ],
+    commands: ['/find_podcasts', '/feedback', '/stats', '/asktrevorai'],
   });
 });
 
-// /asktrevorai
+// ── /asktrevorai ─────────────────────────────────────────
 app.post('/slack/ask', async (req, res) => {
-  if (!verifySlackRequest(req))
-    return res.status(401).json({ error: 'Unauthorized' });
+  if (!verifySlackRequest(req)) return res.status(401).json({ error: 'Unauthorized' });
   const { text, user_name, response_url } = req.body;
   if (!text?.trim()) {
-    return res.json({
-      response_type: 'ephemeral',
-      text: 'Please type a question after /asktrevorai',
-    });
+    return res.json({ response_type: 'ephemeral', text: 'Please type a question.' });
   }
   res.json({ response_type: 'ephemeral', text: '⏳ Thinking...' });
   try {
     const answer = await askClaude(text);
-    await sendToSlack(
-      response_url,
-      `*${user_name} asked:* ${text}\n\n*Answer:*\n${answer}`
-    );
+    await sendToSlack(response_url, `*${user_name} asked:* ${text}\n\n*Answer:*\n${answer}`);
   } catch (error) {
-    console.error('asktrevorai error:', error.message);
-    await sendToSlack(
-      response_url,
-      `❌ Something went wrong.\n*Error:* ${error.message}\n_Screenshot this and send to your developer._`
-    );
+    await sendToSlack(response_url,
+      `❌ Error: ${error.message}\n_Screenshot and send to developer._`);
   }
 });
 
-// /find_podcasts
+// ── /find_podcasts ────────────────────────────────────────
 app.post('/slack/find_podcasts', async (req, res) => {
-  if (!verifySlackRequest(req))
-    return res.status(401).json({ error: 'Unauthorized' });
+  if (!verifySlackRequest(req)) return res.status(401).json({ error: 'Unauthorized' });
   const { text, user_name, response_url } = req.body;
 
   if (!text?.trim()) {
     return res.json({
       response_type: 'ephemeral',
-      text: 'Please include keywords.\n\n*Example:* `/find_podcasts relationships attachment women`',
+      text: 'Please include keywords.\nExample: `/find_podcasts relationships attachment women`',
     });
   }
 
   res.json({
     response_type: 'ephemeral',
-    text:
-      `🔍 Searching *ListenNotes + Podchaser* for *"${text}"*...\n` +
-      `Fetching Apple Top 200 Charts + evaluating quality.\n` +
-      `This may take 30-45 seconds.`,
+    text: `🔍 Searching *ListenNotes + Podchaser* for *"${text}"*...\nThis may take 30-45 seconds.`,
   });
 
   try {
-    const [appleCharts, rejectedPodcasts, pastDecisions, feedbackSummary] =
+    const [appleCharts, rejectedPodcasts, pastDecisions, feedbackSummary, generalFeedback] =
       await Promise.all([
         fetchAppleCharts(),
         db.getRejectedPodcasts(),
         db.getPastDecisions(10),
         db.getFeedbackSummary(10),
+        db.getGeneralFeedback(10),
       ]);
 
     const appleChartsText = formatAppleChartsForClaude(appleCharts);
-    const allExcluded = [
-      ...TREVOR_CONTEXT.alreadyPitched,
-      ...rejectedPodcasts,
-    ];
-    const memoryContext = buildMemoryContext(pastDecisions, feedbackSummary);
+    const allExcluded = [...TREVOR_CONTEXT.alreadyPitched, ...rejectedPodcasts];
+    const memoryContext = buildMemoryContext(pastDecisions, feedbackSummary, generalFeedback);
 
     const tiersText = TREVOR_CONTEXT.tiers
       .map(
@@ -751,130 +794,67 @@ app.post('/slack/find_podcasts', async (req, res) => {
     const systemPrompt = `
 You are Trevor Hanson's podcast outreach assistant.
 
-GUARDRAILS — NEVER VIOLATE THESE:
-- You only find and evaluate podcasts. You do NOT send emails.
-- You only draft pitches for human review. Humans send them manually.
-- English language podcasts ONLY. Filter out any non-English podcasts immediately.
+GUARDRAILS:
+- Find and evaluate podcasts only. Do NOT send emails.
+- English language podcasts ONLY.
 
 ABOUT TREVOR:
 ${TREVOR_CONTEXT.bio}
 
 STRATEGIC PRIORITY:
-Trevor's primary marketing goal is reaching HIGH-ACHIEVING individuals who are 
-financially successful but struggling in their personal relationships.
-These audiences are more likely to invest in Trevor's coaching and programs.
-Tiers 3 and 4 are HIGH PRIORITY alongside Tiers 1 and 2.
+Reach HIGH-ACHIEVING individuals who are financially successful but struggling
+in personal relationships. Tiers 3 and 4 are HIGH PRIORITY.
 
-TARGET SECTORS IN PRIORITY ORDER:
+TARGET SECTORS:
 ${tiersText}
-
-LANGUAGE REQUIREMENT:
-English only. Immediately exclude any non-English podcasts.
 
 ${appleChartsText}
 
-APPLE CHART RANKING BONUS:
-- Ranked #1-25 on Apple Top 200 = +3 points
-- Ranked #26-75 = +2 points
-- Ranked #76-200 = +1 point
-- Not on charts = +0 points
+APPLE CHART BONUS:
+- #1-25 = +3 pts | #26-50 = +1.5 pts | Not on charts = +0 pts
 
-APPLE RATINGS QUALITY SIGNAL:
-Use your knowledge of Apple Podcast ratings to evaluate shows.
-Reference calibration — shows Trevor has been on:
-- Pretty Intense with Danica Patrick (major show, 1000s of reviews)
-- What Fresh Hell Podcast (established show, hundreds of reviews)
-- Mantalks with Connor Beaton (established niche show)
+APPLE RATINGS BONUS:
+- 4.8+ stars with 100+ reviews = +1.5 pts
+- 4.5+ stars with 50+ reviews = +1 pt
+- Under 50 reviews = 0 pts (only include if on Apple Charts)
 
-MINIMUM THRESHOLD: Only include podcasts you believe have 50+ Apple reviews
-OR that appear on the Apple Top 200 charts.
+SCORING (base out of 7 + bonuses):
+- Episodes: 500+=2 | 200-499=1.5 | 100-199=1 | <100=0.5
+- Longevity: 4+yrs=1 | 2-3yrs=0.5 | <2yrs=0
+- Social: 100k+=2 | 50-100k=1.5 | 10-50k=1 | unknown=0.5
+- Authority: Top show=1 | One of many=0.5
+- Alignment: Perfect=1 | Good=0.5 | Weak=0
+- Tiers 3 and 4 priority bonus: +0.5
 
-Apple Ratings Bonus:
-- 4.8+ stars with 100+ reviews = +1.5 points
-- 4.5+ stars with 50+ reviews = +1 point
-- 4.0+ stars with 50+ reviews = +0.5 points
-- Fewer than 50 known reviews = 0 points (flag as low data)
+Minimum score: 5.5
+Apple Top 50 shows qualify at base score 4.5+
 
-HOW TO SCORE PODCASTS (base out of 7 plus bonuses):
+CONTACT EMAIL: Use Podchaser contact_email first, then description, then guess.
 
-EPISODE COUNT (up to 2 points):
-- 500+ = 2 pts
-- 200-499 = 1.5 pts
-- 100-199 = 1 pt
-- Under 100 = 0.5 pts
-
-SHOW LONGEVITY (up to 1 point):
-- 4+ years = 1 pt
-- 2-3 years = 0.5 pts
-- Under 2 years = 0 pts
-
-SOCIAL MEDIA AND AUDIENCE SIZE (up to 2 points):
-- 100k+ followers on any platform = 2 pts
-- 50k-100k = 1.5 pts
-- 10k-50k = 1 pt
-- Unknown or small = 0.5 pts
-
-NICHE AUTHORITY (up to 1 point):
-- THE go-to show in their niche = 1 pt
-- One of many similar shows = 0.5 pts
-
-AUDIENCE ALIGNMENT WITH TREVOR (up to 1 point):
-- Perfect match for Trevor's target audience = 1 pt
-- Good match = 0.5 pts
-- Weak match = 0 pts
-
-APPLE CHART BONUS: up to +3 points
-APPLE RATINGS BONUS: up to +1.5 points
-
-MAXIMUM SCORE: 11.5 (display as capped at 10)
-
-ONLY include podcasts scoring 5.5 or above.
-Podcasts on Apple Top 50 charts automatically qualify if base score is 4.5+.
-Tiers 3 and 4 (high achievers, entrepreneurship) get a +0.5 priority bonus.
-If fewer than 5 podcasts qualify lower your threshold slightly to fill spots.
-
-CONTACT EMAIL PRIORITY:
-1. Use contact_email from Podchaser data if available
-2. Check if email appears in podcast description
-3. Find most likely booking email using common patterns
-4. If unknown: "Not found — check [website]/contact"
-
-PODCASTS TO EXCLUDE (already in pipeline or rejected):
-${allExcluded.join(', ')}
+EXCLUDE: ${allExcluded.join(', ')}
 
 ${memoryContext}
 
-YOUR JOB:
-1. Search for English-language podcasts matching the keywords
-2. Classify each into the correct tier (1-6)
-3. Prioritize Tiers 1-4 especially high-achiever sectors
-4. Cross-reference with Apple Top 200 Charts
-5. Apply Apple ratings bonus (min 50 reviews threshold)
-6. Score each podcast
-7. Only include scores 6 or above
-8. Find contact emails
-9. Return top 5 sorted by score then tier priority
-
-CRITICAL: Return pure JSON array only. No backticks. No markdown. No extra text.
+Return pure JSON array only. No backticks. No markdown.
 
 [
   {
     "title": "podcast name",
     "website": "url",
-    "description": "2-3 sentences about the podcast",
-    "audience": "Who listens. Age, interests, financial profile. 1-2 sentences.",
-    "summary": "Why Trevor fits. Reference their specific audience and content. 2-3 sentences.",
+    "description": "2-3 sentences",
+    "audience": "who listens, financial profile",
+    "summary": "why Trevor fits specifically",
     "total_episodes": 250,
     "quality_score": 8,
-    "score_breakdown": "Episodes: 1.5 | Longevity: 1 | Social: 2 | Authority: 1 | Alignment: 1 | Apple Chart: 2 | Apple Rating: 1 | Priority Bonus: 0",
+    "score_breakdown": "Episodes:1.5|Longevity:1|Social:2|Authority:1|Alignment:1|Apple:1.5",
     "years_running": "5 years",
-    "notable_guests": "Guest names here",
+    "notable_guests": "names",
     "host_social_following": "150k Instagram",
-    "apple_chart_rank": 45,
+    "apple_chart_rank": 15,
     "apple_review_count": "2500+ reviews",
     "apple_rating": "4.8 stars",
-    "contact_email": "contact@podcastname.com",
-    "source": "ListenNotes or Podchaser",
+    "contact_email": "contact@podcast.com",
+    "source": "ListenNotes",
     "language": "English",
     "tier": 1,
     "recommended_angle": "angle_1"
@@ -883,84 +863,54 @@ CRITICAL: Return pure JSON array only. No backticks. No markdown. No extra text.
     `.trim();
 
     const claudeResponse = await askClaudeWithTools(
-      `Search for English-language podcasts matching: "${text}".
-       Use the combined ListenNotes + Podchaser search tool.
-       Prioritize Tiers 3 and 4 (high achievers, entrepreneurship) alongside Tiers 1 and 2.
-       Cross-reference with Apple Top 200 Charts.
-       Only include podcasts with 50+ Apple reviews OR on Apple Charts.
-       Score each and return top 5 as pure JSON. No backticks. No markdown.`,
+      `Search English podcasts matching: "${text}".
+       Prioritize Tiers 3 and 4. Cross-reference Apple Charts.
+       Return top 5 as pure JSON. No backticks. No markdown.`,
       systemPrompt
     );
 
     let podcasts = [];
     try {
-      const cleaned = claudeResponse
-        .replace(/```json/g, '')
-        .replace(/```/g, '')
-        .trim();
+      const cleaned = claudeResponse.replace(/```json/g, '').replace(/```/g, '').trim();
       const jsonMatch = cleaned.match(/\[[\s\S]*\]/);
       if (jsonMatch) {
         podcasts = JSON.parse(jsonMatch[0]);
         console.log(`Claude returned ${podcasts.length} podcasts`);
       } else {
-        console.error(
-          'No JSON found. Claude returned:',
-          cleaned.slice(0, 300)
-        );
-        await sendToSlack(
-          response_url,
-          `❌ No results found for "${text}".\n\nTry:\n• \`/find_podcasts relationships attachment\`\n• \`/find_podcasts high achievers love\`\n• \`/find_podcasts entrepreneurship mindset\``
-        );
+        await sendToSlack(response_url,
+          `❌ No results for "${text}". Try:\n• \`/find_podcasts relationships attachment\`\n• \`/find_podcasts entrepreneurship success\``);
         return;
       }
     } catch (e) {
-      console.error('JSON parse error:', e.message);
-      await sendToSlack(
-        response_url,
-        `❌ Error processing results.\n*Error:* ${e.message}\n_Screenshot this and send to your developer._`
-      );
+      await sendToSlack(response_url,
+        `❌ Error: ${e.message}\n_Screenshot and send to developer._`);
       return;
     }
 
-  // Safety filters
     podcasts = podcasts.filter((p) => {
       const score = p.quality_score || 0;
-      if (score < 5.5) {
-        console.log(`Filtered out (score ${score}): ${p.title}`);
-        return false;
-      }
-      if (p.language && p.language.toLowerCase() !== 'english') {
-        console.log(`Filtered out (non-English): ${p.title}`);
-        return false;
-      }
+      if (score < 5.5) { console.log(`Filtered (score ${score}): ${p.title}`); return false; }
+      if (p.language && p.language.toLowerCase() !== 'english') return false;
       console.log(`Passed (score ${score}, tier ${p.tier}): ${p.title}`);
       return true;
     });
 
     if (podcasts.length === 0) {
-      await sendToSlack(
-        response_url,
-        `No qualifying podcasts found for *"${text}"*.\n\nThis usually means the search terms were too specific. Try:\n• \`/find_podcasts entrepreneurship success\`\n• \`/find_podcasts high achievers relationships\`\n• \`/find_podcasts mindset success personal growth\`\n• \`/find_podcasts relationships attachment\`\n• \`/find_podcasts self improvement confidence\``
-      );
+      await sendToSlack(response_url,
+        `No qualifying podcasts for *"${text}"*.\nTry broader keywords.`);
       return;
     }
 
     const appleCount = podcasts.filter((p) => p.apple_chart_rank).length;
     const stats = await db.getStats();
 
-    // Group by tier for the summary
     const tierCounts = {};
     podcasts.forEach((p) => {
       const tier = p.tier || 'Unknown';
       tierCounts[tier] = (tierCounts[tier] || 0) + 1;
     });
     const tierSummary = Object.entries(tierCounts)
-      .map(([tier, count]) => {
-        const tierInfo = TREVOR_CONTEXT.tiers.find(
-          (t) => t.tier === parseInt(tier)
-        );
-        return `${count} × Tier ${tier}${tierInfo ? ` (${tierInfo.name})` : ''}`;
-      })
+      .map(([tier, count]) => `${count}×T${tier}`)
       .join(' | ');
 
     const headerBlocks = [
@@ -968,7 +918,7 @@ CRITICAL: Return pure JSON array only. No backticks. No markdown. No extra text.
         type: 'header',
         text: {
           type: 'plain_text',
-          text: `🎙️ Podcast Results for "${text}"`,
+          text: `🎙️ Results for "${text.slice(0, 40)}"`,
           emoji: true,
         },
       },
@@ -977,11 +927,10 @@ CRITICAL: Return pure JSON array only. No backticks. No markdown. No extra text.
         text: {
           type: 'mrkdwn',
           text:
-            `Found *${podcasts.length} podcasts* for Trevor` +
-            (appleCount > 0 ? ` — *${appleCount} on Apple Charts* 🍎` : '') +
-            `\n*Sources:* ListenNotes + Podchaser | *Sectors:* ${tierSummary}\n\n` +
-            `🏆 9-10 Elite | ⭐ 7-8 Excellent | ✅ 6 Good\n` +
-            `*DB:* ${stats.total_approved} approved | ${stats.total_rejected} rejected\n` +
+            `*${podcasts.length} podcasts found* | ${tierSummary}` +
+            (appleCount > 0 ? ` | 🍎 ${appleCount} on Apple Charts` : '') +
+            `\n🏆 9-10 Elite | ⭐ 7-8 Excellent | ✅ Good Fit\n` +
+            `DB: ${stats.total_approved} approved | ${stats.total_rejected} rejected\n` +
             `⚠️ _Drafts only — nothing sends automatically._`,
         },
       },
@@ -990,22 +939,112 @@ CRITICAL: Return pure JSON array only. No backticks. No markdown. No extra text.
     const podcastBlocks = podcasts.flatMap((p, i) => buildPodcastBlock(p, i));
     const channel = process.env.SLACK_PODCAST_CHANNEL || '#find-podcasts';
 
-    await postToSlackChannel(
-      channel,
-      [...headerBlocks, ...podcastBlocks],
-      `Podcast results for "${text}"`
-    );
+    await postToSlackChannel(channel, [...headerBlocks, ...podcastBlocks],
+      `Results for "${text}"`);
+    await sendToSlack(response_url,
+      `✅ Posted to ${channel} — ${podcasts.length} podcasts found!`);
 
-    await sendToSlack(
-      response_url,
-      `✅ Results posted to ${channel} — ${podcasts.length} podcasts found!`
-    );
   } catch (error) {
     console.error('find_podcasts error:', error.message);
-    await sendToSlack(
-      response_url,
-      `❌ Search failed.\n*Error:* ${error.message}\n_Screenshot this and send to your developer._`
-    );
+    await sendToSlack(response_url,
+      `❌ Search failed: ${error.message}\n_Screenshot and send to developer._`);
+  }
+});
+
+// ── /feedback ────────────────────────────────────────────
+app.post('/slack/podfeedback', async (req, res) => {
+  if (!verifySlackRequest(req)) return res.status(401).json({ error: 'Unauthorized' });
+  const { text, user_name, response_url } = req.body;
+
+  if (!text?.trim()) {
+    return res.json({
+      response_type: 'ephemeral',
+      text:
+        '*How to use /podfeedback:*\n\n' +
+        '`/podfeedback The podcasts are too small. We need 500+ episode shows.`\n' +
+        '`/podfeedback Stop suggesting marriage podcasts. Trevor targets singles.`\n' +
+        '`/podfeedback The emails are too long. Keep them shorter.`\n\n' +
+        'Claude reads all feedback before every search.',
+    });
+  }
+
+  try {
+    let category = 'general';
+    const lowerText = text.toLowerCase();
+    if (lowerText.includes('email') || lowerText.includes('pitch')) category = 'pitch_quality';
+    else if (lowerText.includes('podcast') || lowerText.includes('show')) category = 'sourcing';
+    else if (lowerText.includes('score') || lowerText.includes('quality')) category = 'scoring';
+    else if (lowerText.includes('audience') || lowerText.includes('niche')) category = 'targeting';
+
+    await db.saveGeneralFeedback(text, user_name, category);
+
+    res.json({
+      response_type: 'in_channel',
+      text:
+        `✅ *Feedback saved by ${user_name}*\n` +
+        `📂 Category: ${category}\n` +
+        `💬 "${text}"\n\n` +
+        `_Claude will use this to improve future suggestions._`,
+    });
+  } catch (error) {
+    res.json({
+      response_type: 'ephemeral',
+      text: `❌ Could not save feedback: ${error.message}`,
+    });
+  }
+});
+
+// ── /stats ───────────────────────────────────────────────
+app.post('/slack/stats', async (req, res) => {
+  if (!verifySlackRequest(req)) return res.status(401).json({ error: 'Unauthorized' });
+
+  try {
+    const stats = await db.getStats();
+    const generalFeedback = await db.getGeneralFeedback(5);
+    const approvalRate = stats.total_reviewed > 0
+      ? Math.round((stats.total_approved / stats.total_reviewed) * 100)
+      : 0;
+
+    let statsText =
+      `📊 *Trevor AI Outreach Stats*\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n\n` +
+      `*Podcast Pipeline:*\n` +
+      `🔍 Total reviewed: ${stats.total_reviewed}\n` +
+      `✅ Approved: ${stats.total_approved}\n` +
+      `❌ Rejected: ${stats.total_rejected}\n` +
+      `📈 Approval rate: ${approvalRate}%\n\n` +
+      `*Emails:*\n` +
+      `📧 Total drafts: ${stats.total_emails}\n\n`;
+
+    if (stats.top_rejection_reasons?.length > 0) {
+      statsText += `*Top Rejection Reasons:*\n`;
+      stats.top_rejection_reasons.forEach((r) => {
+        statsText += `• ${r.rejection_reason}: ${r.count} times\n`;
+      });
+      statsText += '\n';
+    }
+
+    if (generalFeedback.length > 0) {
+      statsText += `*Recent Team Feedback:*\n`;
+      generalFeedback.forEach((f) => {
+        statsText += `• [${f.category}] ${f.feedback_text.slice(0, 80)}${f.feedback_text.length > 80 ? '...' : ''}\n`;
+      });
+      statsText += '\n';
+    }
+
+    statsText +=
+      `*Commands:*\n` +
+      `\`/find_podcasts [keywords]\` — Find podcasts\n` +
+      `\`/feedback [text]\` — Give Claude feedback\n` +
+      `\`/stats\` — View this summary\n` +
+      `\`/asktrevorai [question]\` — Ask anything`;
+
+    res.json({ response_type: 'in_channel', text: statsText });
+  } catch (error) {
+    res.json({
+      response_type: 'ephemeral',
+      text: `❌ Could not load stats: ${error.message}`,
+    });
   }
 });
 
@@ -1026,47 +1065,7 @@ app.post('/slack/actions', async (req, res) => {
   const channelId = payload.channel.id;
   const userName = payload.user.username;
 
-  // ── REJECT ──────────────────────────────────────────
-  if (actionId === 'reject_podcast') {
-    const podcastData = JSON.parse(action.value);
-
-    await db.savePodcastDecision({
-      podcastTitle: podcastData.title,
-      podcastWebsite: podcastData.website || '',
-      podcastDescription: podcastData.description || '',
-      podcastAudience: podcastData.audience || '',
-      listenScore: podcastData.listen_score || 0,
-      decision: 'rejected',
-      decidedBy: userName,
-      keywordsSearched: '',
-    });
-
-    await db.saveFeedback({
-      podcastTitle: podcastData.title,
-      podcastWebsite: podcastData.website || '',
-      podcastAudience: podcastData.audience || '',
-      decision: 'rejected',
-      qualityScore: podcastData.listen_score || 0,
-      rejectionReason: 'Manually rejected by team',
-      decidedBy: userName,
-    });
-
-    await postToSlackChannel(
-      channelId,
-      [
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: `❌ *${podcastData.title}* rejected by ${userName}.\n_Saved to database — Claude will not suggest this again._`,
-          },
-        },
-      ],
-      `Rejected: ${podcastData.title}`
-    );
-  }
-
-  // ── APPROVE ──────────────────────────────────────────
+  // ── APPROVE ────────────────────────────────────────────
   if (actionId === 'approve_podcast') {
     const podcastData = JSON.parse(action.value);
 
@@ -1081,120 +1080,215 @@ app.post('/slack/actions', async (req, res) => {
       keywordsSearched: '',
     });
 
-    await db.saveFeedback({
-      podcastTitle: podcastData.title,
-      podcastWebsite: podcastData.website || '',
-      podcastAudience: podcastData.audience || '',
-      decision: 'approved',
-      qualityScore: podcastData.listen_score || 0,
-      approvalNotes: 'Manually approved by team',
-      decidedBy: userName,
-    });
-
-    await postToSlackChannel(
-      channelId,
-      [
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: `✅ *${podcastData.title}* approved by ${userName}!\n⏳ Generating Email 1 draft...`,
-          },
+    // Post approval confirmation + email generation
+    await postToSlackChannel(channelId,
+      [{
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `✅ *${podcastData.title}* approved by ${userName}!\n⏳ Generating Email 1 draft...`,
         },
-      ],
+      }],
       `Approved: ${podcastData.title}`
     );
 
+    // Generate pitch email
     try {
       const pitchData = await generatePitchEmail(
-        podcastData.title,
-        podcastData.description,
-        podcastData.audience,
-        1,
-        null,
-        null
+        podcastData.title, podcastData.description,
+        podcastData.audience, 1, null, null
       );
-
       await db.savePitchEmail(podcastData.title, 1, pitchData.email_content);
-      const emailBlocks = buildEmailBlock(
-        podcastData.title,
-        1,
-        pitchData,
-        podcastData
-      );
-      await postToSlackChannel(
-        channelId,
-        emailBlocks,
-        `Email 1 for ${podcastData.title}`
-      );
+      const emailBlocks = buildEmailBlock(podcastData.title, 1, pitchData, podcastData);
+      await postToSlackChannel(channelId, emailBlocks, `Email 1 for ${podcastData.title}`);
     } catch (error) {
       console.error('Pitch error:', error.message);
-      await postToSlackChannel(
-        channelId,
-        [
-          {
-            type: 'section',
-            text: {
-              type: 'mrkdwn',
-              text: `❌ Could not generate pitch.\n*Error:* ${error.message}\n_Screenshot this and send to your developer._`,
-            },
-          },
-        ],
+      await postToSlackChannel(channelId,
+        [{ type: 'section', text: { type: 'mrkdwn',
+          text: `❌ Could not generate pitch: ${error.message}` }}],
         'Pitch failed'
+      );
+    }
+
+    // Post optional notes form
+    await postToSlackChannel(
+      channelId,
+      buildApproveNotesForm(podcastData.title),
+      `Notes for ${podcastData.title}`
+    );
+  }
+
+  // ── APPROVE NOTES SUBMIT ────────────────────────────────
+  if (actionId === 'approve_notes_submit') {
+    const podcastTitle = action.value;
+
+    // Extract notes from the input block
+    const notesBlock = payload.state?.values?.approve_notes_block;
+    const notes = notesBlock?.approve_notes_input?.value || '';
+
+    if (notes.trim()) {
+      await db.saveFeedback({
+        podcastTitle,
+        podcastWebsite: '',
+        podcastAudience: '',
+        decision: 'approved',
+        qualityScore: 0,
+        approvalNotes: notes,
+        decidedBy: userName,
+      });
+
+      await postToSlackChannel(channelId,
+        [{
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `💾 *Approval notes saved for ${podcastTitle}*\n"${notes}"\n_Claude will use this to find similar podcasts._`,
+          },
+        }],
+        `Notes saved for ${podcastTitle}`
       );
     }
   }
 
-  // ── GENERATE NEXT EMAIL ──────────────────────────────
+  // ── APPROVE NOTES SKIP ──────────────────────────────────
+  if (actionId === 'approve_notes_skip') {
+    await postToSlackChannel(channelId,
+      [{
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `_Notes skipped for ${action.value}._`,
+        },
+      }],
+      'Notes skipped'
+    );
+  }
+
+  // ── REJECT START — Show inline form ────────────────────
+  if (actionId === 'reject_podcast_start') {
+    const podcastData = JSON.parse(action.value);
+
+    await postToSlackChannel(
+      channelId,
+      buildRejectReasonForm(podcastData.title, action.value),
+      `Reject: ${podcastData.title}`
+    );
+  }
+
+  // ── REJECT CONFIRM — Save rejection with reason ─────────
+  if (actionId === 'reject_confirm') {
+    const podcastData = JSON.parse(action.value);
+
+    // Get selected reason from dropdown
+    let selectedReason = 'Other';
+    const stateValues = payload.state?.values || {};
+    for (const blockId of Object.keys(stateValues)) {
+      if (stateValues[blockId]?.reject_reason_select?.selected_option?.value) {
+        selectedReason = stateValues[blockId].reject_reason_select.selected_option.value;
+      }
+    }
+
+    // Get typed details
+    let details = '';
+    for (const blockId of Object.keys(stateValues)) {
+      if (stateValues[blockId]?.reject_details_input?.value) {
+        details = stateValues[blockId].reject_details_input.value;
+      }
+    }
+
+    // Require details
+    if (!details.trim()) {
+      await postToSlackChannel(channelId,
+        [{
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: `⚠️ Please add details before confirming rejection. Details help Claude learn.`,
+          },
+        }],
+        'Missing details'
+      );
+      return;
+    }
+
+    const fullReason = `${selectedReason}: ${details}`;
+
+    await db.savePodcastDecision({
+      podcastTitle: podcastData.title,
+      podcastWebsite: podcastData.website || '',
+      podcastDescription: podcastData.description || '',
+      podcastAudience: podcastData.audience || '',
+      listenScore: 0,
+      decision: 'rejected',
+      decidedBy: userName,
+      keywordsSearched: '',
+    });
+
+    await db.saveFeedback({
+      podcastTitle: podcastData.title,
+      podcastWebsite: podcastData.website || '',
+      podcastAudience: podcastData.audience || '',
+      decision: 'rejected',
+      qualityScore: 0,
+      rejectionReason: selectedReason,
+      approvalNotes: details,
+      decidedBy: userName,
+    });
+
+    await postToSlackChannel(channelId,
+      [{
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text:
+            `❌ *${podcastData.title}* rejected by ${userName}\n` +
+            `📂 *Reason:* ${selectedReason}\n` +
+            `💬 *Details:* "${details}"\n\n` +
+            `_Saved to database — Claude will not suggest this again and will learn from this feedback._`,
+        },
+      }],
+      `Rejected: ${podcastData.title}`
+    );
+  }
+
+  // ── REJECT CANCEL ───────────────────────────────────────
+  if (actionId === 'reject_cancel') {
+    await postToSlackChannel(channelId,
+      [{
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `↩️ Rejection cancelled for *${action.value}*`,
+        },
+      }],
+      'Rejection cancelled'
+    );
+  }
+
+  // ── GENERATE NEXT EMAIL ─────────────────────────────────
   if (actionId === 'generate_next_email') {
     const data = JSON.parse(action.value);
     const { title, emailNumber, hostName, chosenAngle } = data;
 
-    await postToSlackChannel(
-      channelId,
-      [
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: `⏳ Generating Email ${emailNumber} draft for *${title}*...`,
-          },
-        },
-      ],
+    await postToSlackChannel(channelId,
+      [{ type: 'section', text: { type: 'mrkdwn',
+        text: `⏳ Generating Email ${emailNumber} for *${title}*...` }}],
       `Generating email ${emailNumber}`
     );
 
     try {
       const pitchData = await generatePitchEmail(
-        title,
-        data.description,
-        data.audience,
-        emailNumber,
-        hostName,
-        chosenAngle
+        title, data.description, data.audience,
+        emailNumber, hostName, chosenAngle
       );
-
       await db.savePitchEmail(title, emailNumber, pitchData.email_content);
       const emailBlocks = buildEmailBlock(title, emailNumber, pitchData, data);
-      await postToSlackChannel(
-        channelId,
-        emailBlocks,
-        `Email ${emailNumber} for ${title}`
-      );
+      await postToSlackChannel(channelId, emailBlocks, `Email ${emailNumber} for ${title}`);
     } catch (error) {
-      console.error('Email generation error:', error.message);
-      await postToSlackChannel(
-        channelId,
-        [
-          {
-            type: 'section',
-            text: {
-              type: 'mrkdwn',
-              text: `❌ Could not generate Email ${emailNumber}.\n*Error:* ${error.message}\n_Screenshot this and send to your developer._`,
-            },
-          },
-        ],
-        'Email generation failed'
+      await postToSlackChannel(channelId,
+        [{ type: 'section', text: { type: 'mrkdwn',
+          text: `❌ Could not generate Email ${emailNumber}: ${error.message}` }}],
+        'Email failed'
       );
     }
   }
@@ -1203,8 +1297,5 @@ app.post('/slack/actions', async (req, res) => {
 // ── START ────────────────────────────────────────────────
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
-  console.log('Sources: ListenNotes + Podchaser');
-  console.log('Apple Charts: Top 200');
-  console.log('Sectors: 6 tiers with high-achiever priority');
-  console.log('Guardrails: No auto-sending. English only. 50+ review threshold.');
+  console.log('Commands: /find_podcasts /feedback /stats /asktrevorai');
 });
