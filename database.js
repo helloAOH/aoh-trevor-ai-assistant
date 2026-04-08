@@ -12,8 +12,6 @@ const pool = new Pool({
 async function initializeDatabase() {
   const client = await pool.connect();
   try {
-
-    // Stores every approve/reject decision
     await client.query(`
       CREATE TABLE IF NOT EXISTS podcast_decisions (
         id SERIAL PRIMARY KEY,
@@ -29,7 +27,6 @@ async function initializeDatabase() {
       );
     `);
 
-    // Stores every generated pitch email
     await client.query(`
       CREATE TABLE IF NOT EXISTS pitch_history (
         id SERIAL PRIMARY KEY,
@@ -42,11 +39,10 @@ async function initializeDatabase() {
       );
     `);
 
-    // Stores detailed feedback for Claude to learn from
     await client.query(`
       CREATE TABLE IF NOT EXISTS podcast_feedback (
         id SERIAL PRIMARY KEY,
-        podcast_title TEXT NOT NULL,
+        podcast_title TEXT,
         podcast_website TEXT,
         podcast_audience TEXT,
         decision TEXT NOT NULL,
@@ -59,7 +55,16 @@ async function initializeDatabase() {
       );
     `);
 
-    // Stores system preferences that affect Claude behavior
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS general_feedback (
+        id SERIAL PRIMARY KEY,
+        feedback_text TEXT NOT NULL,
+        submitted_by TEXT,
+        category TEXT,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+    `);
+
     await client.query(`
       CREATE TABLE IF NOT EXISTS system_preferences (
         id SERIAL PRIMARY KEY,
@@ -112,7 +117,6 @@ async function savePodcastDecision(data) {
 }
 
 // ── SAVE DETAILED FEEDBACK ───────────────────────────────
-// This is what Claude reads to get smarter over time
 async function saveFeedback(data) {
   const {
     podcastTitle,
@@ -145,6 +149,16 @@ async function saveFeedback(data) {
   );
 }
 
+// ── SAVE GENERAL FEEDBACK ────────────────────────────────
+async function saveGeneralFeedback(feedbackText, submittedBy, category) {
+  await pool.query(
+    `INSERT INTO general_feedback
+     (feedback_text, submitted_by, category)
+     VALUES ($1, $2, $3)`,
+    [feedbackText, submittedBy, category || 'general']
+  );
+}
+
 // ── SAVE PITCH EMAIL ─────────────────────────────────────
 async function savePitchEmail(podcastTitle, emailNumber, emailContent) {
   const result = await pool.query(
@@ -171,7 +185,6 @@ async function getPastDecisions(limit = 20) {
 }
 
 // ── GET DETAILED FEEDBACK FOR CLAUDE ────────────────────
-// Claude uses this to understand WHY things were approved/rejected
 async function getFeedbackSummary(limit = 15) {
   const result = await pool.query(
     `SELECT podcast_title, decision, podcast_audience,
@@ -182,6 +195,31 @@ async function getFeedbackSummary(limit = 15) {
      LIMIT $1`,
     [limit]
   );
+  return result.rows;
+}
+
+// ── GET GENERAL FEEDBACK FOR CLAUDE ─────────────────────
+async function getGeneralFeedback(limit = 10) {
+  const result = await pool.query(
+    `SELECT feedback_text, submitted_by, category, created_at
+     FROM general_feedback
+     ORDER BY created_at DESC
+     LIMIT $1`,
+    [limit]
+  );
+  return result.rows;
+}
+
+// ── GET REJECTION REASON STATS ───────────────────────────
+async function getRejectionStats() {
+  const result = await pool.query(`
+    SELECT rejection_reason, COUNT(*) as count
+    FROM podcast_feedback
+    WHERE decision = 'rejected'
+      AND rejection_reason IS NOT NULL
+    GROUP BY rejection_reason
+    ORDER BY count DESC
+  `);
   return result.rows;
 }
 
@@ -205,25 +243,54 @@ async function getApprovedPodcasts() {
   return result.rows;
 }
 
-// ── GET STATS SUMMARY ────────────────────────────────────
+// ── GET FULL STATS ───────────────────────────────────────
 async function getStats() {
-  const result = await pool.query(`
+  const decisionsResult = await pool.query(`
     SELECT
       COUNT(*) FILTER (WHERE decision = 'approved') as total_approved,
       COUNT(*) FILTER (WHERE decision = 'rejected') as total_rejected,
       COUNT(*) as total_reviewed
     FROM podcast_decisions
   `);
-  return result.rows[0];
+
+  const emailsResult = await pool.query(`
+    SELECT COUNT(*) as total_emails
+    FROM pitch_history
+  `);
+
+  const rejectionResult = await pool.query(`
+    SELECT rejection_reason, COUNT(*) as count
+    FROM podcast_feedback
+    WHERE decision = 'rejected'
+      AND rejection_reason IS NOT NULL
+    GROUP BY rejection_reason
+    ORDER BY count DESC
+    LIMIT 5
+  `);
+
+  const feedbackResult = await pool.query(`
+    SELECT COUNT(*) as total_feedback
+    FROM general_feedback
+  `);
+
+  return {
+    ...decisionsResult.rows[0],
+    total_emails: emailsResult.rows[0].total_emails,
+    total_feedback: feedbackResult.rows[0].total_feedback,
+    top_rejection_reasons: rejectionResult.rows,
+  };
 }
 
 module.exports = {
   initializeDatabase,
   savePodcastDecision,
   saveFeedback,
+  saveGeneralFeedback,
   savePitchEmail,
   getPastDecisions,
   getFeedbackSummary,
+  getGeneralFeedback,
+  getRejectionStats,
   getRejectedPodcasts,
   getApprovedPodcasts,
   getStats,
