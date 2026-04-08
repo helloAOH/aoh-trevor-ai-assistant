@@ -437,23 +437,40 @@ async function postToSlackChannel(channel, blocks, text) {
 // ── BUILD PODCAST CARD ───────────────────────────────────
 function buildPodcastBlock(podcast, index) {
   const score = podcast.quality_score || 0;
-  let scoreDisplay = '';
-  if (score >= 9) scoreDisplay = `🏆 ${score}/10 — Elite`;
-  else if (score >= 7) scoreDisplay = `⭐ ${score}/10 — Excellent`;
-  else scoreDisplay = `✅ ${score}/10 — Good Fit`;
+  let scoreEmoji = '✅';
+  if (score >= 9) scoreEmoji = '🏆';
+  else if (score >= 7) scoreEmoji = '⭐';
 
   const appleBadge = podcast.apple_chart_rank
-    ? `🍎 #${podcast.apple_chart_rank} on Apple Top 200 Today`
+    ? ` | 🍎 Apple #${podcast.apple_chart_rank}`
     : '';
 
-  const emailDisplay =
-    podcast.contact_email && podcast.contact_email !== 'Not found'
-      ? `📧 ${podcast.contact_email}`
-      : `📧 ${podcast.contact_email || 'Not found — check website'}`;
+  const email = podcast.contact_email &&
+    podcast.contact_email !== 'Not found'
+    ? podcast.contact_email
+    : 'Not found — check website';
 
-  const tierLabel = podcast.tier
-    ? `Tier ${podcast.tier}`
-    : 'Unclassified';
+  const tierName = TREVOR_CONTEXT.tiers.find(
+    (t) => t.tier === podcast.tier
+  )?.name || 'General';
+
+  // Build one clean text block — avoids invalid_blocks errors
+  const cardText = [
+    `*${index + 1}. ${podcast.title}*${appleBadge}`,
+    ``,
+    `${scoreEmoji} *Score:* ${score}/10 | 🏷️ *Tier ${podcast.tier}:* ${tierName} | 📡 *Source:* ${podcast.source || 'ListenNotes'}`,
+    `🌐 *Website:* ${(podcast.website || 'N/A').slice(0, 100)}`,
+    `🎙️ *Episodes:* ${podcast.total_episodes || 'N/A'} (${podcast.years_running || 'Unknown'})`,
+    `📱 *Host Following:* ${(podcast.host_social_following || 'Unknown').slice(0, 100)}`,
+    `🍎 *Apple:* ${(podcast.apple_rating || 'Unknown')} — ${(podcast.apple_review_count || 'Unknown reviews')}`,
+    `📧 *Contact:* ${email.slice(0, 150)}`,
+    ``,
+    `👥 *Audience:* ${(podcast.audience || 'N/A').slice(0, 200)}`,
+    ``,
+    `💡 *Why Trevor fits:* ${(podcast.summary || podcast.description || '').slice(0, 250)}`,
+    ``,
+    `📊 *Score:* ${(podcast.score_breakdown || 'N/A').slice(0, 150)}`,
+  ].join('\n');
 
   return [
     { type: 'divider' },
@@ -461,96 +478,7 @@ function buildPodcastBlock(podcast, index) {
       type: 'section',
       text: {
         type: 'mrkdwn',
-        text:
-          `*${index + 1}. ${podcast.title}*` +
-          (appleBadge ? `\n${appleBadge}` : ''),
-      },
-    },
-    {
-      type: 'section',
-      fields: [
-        {
-          type: 'mrkdwn',
-          text: `*🌐 Website*\n${podcast.website || 'N/A'}`,
-        },
-        {
-          type: 'mrkdwn',
-          text: `*🎙️ Episodes*\n${podcast.total_episodes || 'N/A'} (${podcast.years_running || 'Unknown'})`,
-        },
-      ],
-    },
-    {
-      type: 'section',
-      fields: [
-        {
-          type: 'mrkdwn',
-          text: `*⭐ Quality Score*\n${scoreDisplay}`,
-        },
-        {
-          type: 'mrkdwn',
-          text: `*📱 Host Following*\n${podcast.host_social_following || 'Unknown'}`,
-        },
-      ],
-    },
-    {
-      type: 'section',
-      fields: [
-        {
-          type: 'mrkdwn',
-          text: `*📡 Source*\n${podcast.source || 'ListenNotes'}`,
-        },
-        {
-          type: 'mrkdwn',
-          text: `*🏷️ Sector*\n${tierLabel}`,
-        },
-      ],
-    },
-    {
-      type: 'section',
-      fields: [
-        {
-          type: 'mrkdwn',
-          text: `*🍎 Apple Reviews*\n${podcast.apple_review_count || 'Unknown'}`,
-        },
-        {
-          type: 'mrkdwn',
-          text: `*⭐ Apple Rating*\n${podcast.apple_rating || 'Unknown'}`,
-        },
-      ],
-    },
-    {
-      type: 'section',
-      text: {
-        type: 'mrkdwn',
-        text: `*🎤 Notable Guests*\n${(podcast.notable_guests || 'Not available').slice(0, 200)}`,
-      },
-    },
-    {
-      type: 'section',
-      text: {
-        type: 'mrkdwn',
-        text: `*📊 Score Breakdown*\n${(podcast.score_breakdown || 'N/A').slice(0, 200)}`,
-      },
-    },
-    {
-      type: 'section',
-      text: {
-        type: 'mrkdwn',
-        text: `*${emailDisplay}*`,
-      },
-    },
-    {
-      type: 'section',
-      text: {
-        type: 'mrkdwn',
-        text: `*👥 Audience*\n${(podcast.audience || 'N/A').slice(0, 200)}`,
-      },
-    },
-    {
-      type: 'section',
-      text: {
-        type: 'mrkdwn',
-        text: `*💡 Why Trevor fits*\n${(podcast.summary || podcast.description || '').slice(0, 300)}`,
+        text: cardText,
       },
     },
     {
@@ -565,8 +493,8 @@ function buildPodcastBlock(podcast, index) {
           value: JSON.stringify({
             title: podcast.title,
             website: podcast.website,
-            description: podcast.description,
-            audience: podcast.audience,
+            description: (podcast.description || '').slice(0, 500),
+            audience: (podcast.audience || '').slice(0, 300),
             listen_score: podcast.quality_score || 0,
           }),
         },
@@ -575,7 +503,13 @@ function buildPodcastBlock(podcast, index) {
           text: { type: 'plain_text', text: '❌ Reject', emoji: true },
           style: 'danger',
           action_id: 'reject_podcast',
-          value: JSON.stringify({ title: podcast.title }),
+          value: JSON.stringify({
+            title: podcast.title,
+            website: podcast.website || '',
+            description: (podcast.description || '').slice(0, 200),
+            audience: (podcast.audience || '').slice(0, 200),
+            listen_score: podcast.quality_score || 0,
+          }),
         },
       ],
     },
