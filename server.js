@@ -522,14 +522,14 @@ function buildPodcastBlock(podcast, index) {
       type: 'section',
       text: {
         type: 'mrkdwn',
-        text: `*🎤 Notable Guests*\n${podcast.notable_guests || 'Not available'}`,
+        text: `*🎤 Notable Guests*\n${(podcast.notable_guests || 'Not available').slice(0, 200)}`,
       },
     },
     {
       type: 'section',
       text: {
         type: 'mrkdwn',
-        text: `*📊 Score Breakdown*\n${podcast.score_breakdown || 'N/A'}`,
+        text: `*📊 Score Breakdown*\n${(podcast.score_breakdown || 'N/A').slice(0, 200)}`,
       },
     },
     {
@@ -543,14 +543,14 @@ function buildPodcastBlock(podcast, index) {
       type: 'section',
       text: {
         type: 'mrkdwn',
-        text: `*👥 Audience*\n${podcast.audience || 'N/A'}`,
+        text: `*👥 Audience*\n${(podcast.audience || 'N/A').slice(0, 200)}`,
       },
     },
     {
       type: 'section',
       text: {
         type: 'mrkdwn',
-        text: `*💡 Why Trevor fits*\n${podcast.summary || podcast.description}`,
+        text: `*💡 Why Trevor fits*\n${(podcast.summary || podcast.description || '').slice(0, 300)}`,
       },
     },
     {
@@ -1043,18 +1043,12 @@ CRITICAL: Return pure JSON array only. No backticks. No markdown. No extra text.
         text: {
           type: 'mrkdwn',
           text:
-            `Found *${podcasts.length} qualifying podcasts* for Trevor` +
-            (appleCount > 0
-              ? ` — *${appleCount} on Apple Top 200 today* 🍎`
-              : '') +
-            `\n*Sources:* ListenNotes + Podchaser\n` +
-            `*Sectors found:* ${tierSummary}\n\n` +
-            `*Quality Score Guide:*\n` +
-            `🏆 9-10 — Elite (Apple Charts + top show + great ratings)\n` +
-            `⭐ 7-8 — Excellent fit\n` +
-            `✅ 6 — Good fit\n\n` +
-            `*Memory:* ${stats.total_approved} approved | ${stats.total_rejected} rejected\n\n` +
-            `⚠️ _All pitch emails are DRAFTS ONLY — nothing sends automatically._`,
+            `Found *${podcasts.length} podcasts* for Trevor` +
+            (appleCount > 0 ? ` — *${appleCount} on Apple Charts* 🍎` : '') +
+            `\n*Sources:* ListenNotes + Podchaser | *Sectors:* ${tierSummary}\n\n` +
+            `🏆 9-10 Elite | ⭐ 7-8 Excellent | ✅ 6 Good\n` +
+            `*DB:* ${stats.total_approved} approved | ${stats.total_rejected} rejected\n` +
+            `⚠️ _Drafts only — nothing sends automatically._`,
         },
       },
     ];
