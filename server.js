@@ -61,40 +61,35 @@ const APPLE_CHART_CATEGORIES = {
 };
 
 async function fetchAppleCharts() {
-  const results = {};
-  for (const [category, id] of Object.entries(APPLE_CHART_CATEGORIES)) {
-    try {
-      const url = `https://rss.applemarketingtools.com/api/v2/us/podcasts/top/50/${id}/podcasts.json`;
-      const response = await axios.get(url, {
-        timeout: 10000,
-        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; PodcastBot/1.0)' },
-      });
-      if (response.data?.feed?.results) {
-        results[category] = response.data.feed.results.map((p, index) => ({
-          rank: index + 1,
-          name: p.name,
-          artistName: p.artistName,
-        }));
-        console.log(`Apple charts fetched for ${category}: ${results[category].length}`);
-      }
-    } catch (err) {
-      console.error(`Apple charts error for ${category}:`, err.message);
-      results[category] = [];
+  try {
+    const url = 'https://rss.applemarketingtools.com/api/v2/us/podcasts/top/100/podcasts.json';
+    const response = await axios.get(url, {
+      timeout: 10000,
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; PodcastBot/1.0)' },
+    });
+    if (response.data?.feed?.results) {
+      const list = response.data.feed.results.map((p, index) => ({
+        rank: index + 1,
+        name: p.name,
+        artistName: p.artistName,
+      }));
+      console.log(`Apple top podcasts fetched: ${list.length}`);
+      return { top: list };
     }
+  } catch (err) {
+    console.error('Apple charts error:', err.message);
   }
-  return results;
+  return { top: [] };
 }
 
 function formatAppleChartsForClaude(charts) {
-  let text = 'APPLE PODCAST CHARTS TOP 50 (fetched today):\n\n';
-  for (const [category, podcasts] of Object.entries(charts)) {
-    if (podcasts.length === 0) continue;
-    text += `${category.toUpperCase()} TOP ${podcasts.length}:\n`;
-    podcasts.forEach((p) => {
-      text += `  #${p.rank}. ${p.name} by ${p.artistName}\n`;
-    });
-    text += '\n';
-  }
+  const podcasts = (charts && charts.top) || [];
+  if (podcasts.length === 0) return 'APPLE PODCAST CHARTS: unavailable right now.\n\n';
+  let text = `APPLE PODCASTS — US TOP ${podcasts.length} OVERALL (fetched today):\n`;
+  podcasts.forEach((p) => {
+    text += `  #${p.rank}. ${p.name} by ${p.artistName}\n`;
+  });
+  text += '\n';
   return text;
 }
 
