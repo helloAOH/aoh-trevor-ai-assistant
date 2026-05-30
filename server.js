@@ -306,6 +306,14 @@ async function generatePitchEmail(
 ) {
   const client = new Anthropic.Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
+// Load current social stats from the database (set via /update_stats)
+  let socialStatsLine = '';
+  try {
+    socialStatsLine = (await db.getSystemPreference('SOCIAL_STATS')) || '';
+  } catch (e) {
+    console.error('Could not load SOCIAL_STATS:', e.message);
+  }
+
   const anglesText = TREVOR_CONTEXT.pitchAngles
     .map((a) => `${a.id}: "${a.topic}" (Best for: ${a.bestFor})`)
     .join('\n');
@@ -337,6 +345,7 @@ Instructions:
 - Email 1: Replace [HOST_NAME] and [SPECIFIC_TO_PODCAST] (8-12 words)
 - Email 2 and 3: Replace [HOST_NAME] and [EPISODE_TOPIC_ANGLE]
 - Keep everything else exactly as written
+- IMPORTANT: In the promotion section, use these EXACT current social stats and ignore any follower numbers already in the template (ig = Instagram, fb = Facebook, tiktok = TikTok, newsletter = email subscribers): ${socialStatsLine || 'leave template numbers as-is'}
 - Match Trevor's voice: warm, direct, confident
 
 Return JSON only — no backticks no markdown:
@@ -369,6 +378,7 @@ ${template}
   }
   return { email_content: text, chosen_angle: 'angle_1', host_name: hostName || podcastName };
 }
+
 
 // ── SEND TO SLACK ────────────────────────────────────────
 async function sendToSlack(responseUrl, text) {
