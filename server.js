@@ -302,7 +302,7 @@ async function askClaude(userMessage) {
 // ── GENERATE PITCH EMAIL ─────────────────────────────────
 async function generatePitchEmail(
   podcastName, podcastDescription, podcastAudience,
-  emailNumber, hostName, chosenAngle
+  emailNumber, hostName, chosenAngle, tier
 ) {
   const client = new Anthropic.Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -314,6 +314,7 @@ async function generatePitchEmail(
     console.error('Could not load SOCIAL_STATS:', e.message);
   }
 
+  console.log('Generating email — tier:', tier, '| email #', emailNumber);
   const anglesText = TREVOR_CONTEXT.pitchAngles
     .map((a) => `${a.id}: "${a.topic}" (Best for: ${a.bestFor})`)
     .join('\n');
@@ -446,6 +447,8 @@ function buildPodcastBlock(podcast, index) {
     description: (podcast.description || '').slice(0, 300),
     audience: (podcast.audience || '').slice(0, 200),
     listen_score: podcast.quality_score || 0,
+    tier: podcast.tier || null,
+    recommended_angle: podcast.recommended_angle || null,
   });
 
   return [
@@ -659,6 +662,7 @@ function buildEmailBlock(podcastTitle, emailNumber, pitchData, podcastData) {
           hostName: pitchData.host_name,
           chosenAngle: pitchData.chosen_angle,
           angleTopic: pitchData.angle_topic,
+          tier: podcastData.tier || null,
         }),
       }],
     });
@@ -1141,7 +1145,7 @@ app.post('/slack/actions', async (req, res) => {
     try {
       const pitchData = await generatePitchEmail(
         podcastData.title, podcastData.description,
-        podcastData.audience, 1, null, null
+        podcastData.audience, 1, null, null, podcastData.tier
       );
       await db.savePitchEmail(podcastData.title, 1, pitchData.email_content);
       const emailBlocks = buildEmailBlock(podcastData.title, 1, pitchData, podcastData);
@@ -1324,7 +1328,7 @@ app.post('/slack/actions', async (req, res) => {
     try {
       const pitchData = await generatePitchEmail(
         title, data.description, data.audience,
-        emailNumber, hostName, chosenAngle
+        emailNumber, hostName, chosenAngle, data.tier
       );
       await db.savePitchEmail(title, emailNumber, pitchData.email_content);
       const emailBlocks = buildEmailBlock(title, emailNumber, pitchData, data);
