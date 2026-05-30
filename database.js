@@ -159,6 +159,28 @@ async function saveGeneralFeedback(feedbackText, submittedBy, category) {
   );
 }
 
+// ── GET A SYSTEM PREFERENCE ──────────────────────────────
+async function getSystemPreference(key) {
+  const result = await pool.query(
+    `SELECT preference_value FROM system_preferences WHERE preference_key = $1`,
+    [key]
+  );
+  return result.rows[0] ? result.rows[0].preference_value : null;
+}
+
+// ── SET A SYSTEM PREFERENCE ──────────────────────────────
+async function setSystemPreference(key, value, updatedBy) {
+  await pool.query(
+    `INSERT INTO system_preferences (preference_key, preference_value, updated_by, updated_at)
+     VALUES ($1, $2, $3, NOW())
+     ON CONFLICT (preference_key)
+     DO UPDATE SET preference_value = EXCLUDED.preference_value,
+                   updated_by = EXCLUDED.updated_by,
+                   updated_at = NOW()`,
+    [key, value, updatedBy || 'unknown']
+  );
+}
+
 // ── SAVE PITCH EMAIL ─────────────────────────────────────
 async function savePitchEmail(podcastTitle, emailNumber, emailContent) {
   const result = await pool.query(
@@ -294,4 +316,6 @@ module.exports = {
   getRejectedPodcasts,
   getApprovedPodcasts,
   getStats,
+  getSystemPreference,
+  setSystemPreference,
 };

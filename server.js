@@ -994,6 +994,41 @@ app.post('/slack/podfeedback', async (req, res) => {
   }
 });
 
+// ── /update_stats ────────────────────────────────────────
+app.post('/slack/update_stats', async (req, res) => {
+  if (!verifySlackRequest(req)) return res.status(401).json({ error: 'Unauthorized' });
+  const { text, user_name } = req.body;
+
+  if (!text?.trim()) {
+    return res.json({
+      response_type: 'ephemeral',
+      text:
+        '*How to use /update_stats:*\n\n' +
+        '`/update_stats ig 561k fb 73k tiktok 248k newsletter 40k+`\n\n' +
+        'This updates Trevor’s follower numbers everywhere in the pitch emails. ' +
+        'It stays until you run it again.',
+    });
+  }
+
+  try {
+    const value = text.trim();
+    await db.setSystemPreference('SOCIAL_STATS', value, user_name);
+
+    res.json({
+      response_type: 'in_channel',
+      text:
+        `✅ *Social stats updated by ${user_name}*\n` +
+        `📊 New stats: \`${value}\`\n\n` +
+        `_These will now appear in all future pitch emails._`,
+    });
+  } catch (error) {
+    res.json({
+      response_type: 'ephemeral',
+      text: `❌ Could not update stats: ${error.message}`,
+    });
+  }
+});
+
 // ── /stats ───────────────────────────────────────────────
 app.post('/slack/stats', async (req, res) => {
   if (!verifySlackRequest(req)) return res.status(401).json({ error: 'Unauthorized' });
