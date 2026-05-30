@@ -319,7 +319,11 @@ async function generatePitchEmail(
     .map((a) => `${a.id}: "${a.topic}" (Best for: ${a.bestFor})`)
     .join('\n');
 
-  let template = '';
+  // Pick the right tier template (A/B/C). Defaults to A if tier is unknown.
+  const templateLetter = TREVOR_CONTEXT.pitchTemplates.tierToTemplate[tier] || 'A';
+  console.log('Using template:', templateLetter, 'for tier:', tier);
+  
+    let template = '';
   if (emailNumber === 1) {
     template = TREVOR_CONTEXT.pitchTemplates[templateLetter].email1('[HOST_NAME]');
   } else if (emailNumber === 2) {
