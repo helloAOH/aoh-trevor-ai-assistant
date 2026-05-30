@@ -98,6 +98,24 @@ function formatAppleChartsForClaude(charts) {
   return text;
 }
 
+// ── GET REAL APPLE PODCASTS LINK (free iTunes Search API) ──
+async function fetchAppleInfo(title) {
+  try {
+    const response = await axios.get('https://itunes.apple.com/search', {
+      params: { term: title, entity: 'podcast', limit: 1 },
+      timeout: 8000,
+    });
+    const result = response.data?.results?.[0];
+    if (result?.collectionViewUrl) {
+      return { appleUrl: result.collectionViewUrl };
+    }
+  } catch (err) {
+    console.error('iTunes lookup error:', err.message);
+  }
+  // Fallback: an Apple Podcasts search link (always works)
+  return { appleUrl: `https://podcasts.apple.com/us/search?term=${encodeURIComponent(title)}` };
+}
+
 // ── SEARCH PODCASTS VIA LISTENNOTES ──────────────────────
 async function searchListenNotes(keywords, maxResults = 10) {
   try {
@@ -436,7 +454,7 @@ function buildPodcastBlock(podcast, index) {
     `🌐 *Website:* ${(podcast.website || 'N/A').slice(0, 100)}`,
     `🎙️ *Episodes:* ${podcast.total_episodes || 'N/A'} (${podcast.years_running || 'Unknown'})`,
     `📱 *Host Following:* ${(podcast.host_social_following || 'Unknown').slice(0, 100)}`,
-    `🍎 *Apple:* ${podcast.apple_rating || 'Unknown'} — ${podcast.apple_review_count || 'Unknown reviews'}`,
+    `🍎 *Apple:* ${podcast.apple_rating || 'Unknown'} — ${podcast.apple_review_count || 'Unknown reviews'}${podcast.apple_url ? ` — <${podcast.apple_url}|View on Apple>` : ''}`,
     `📧 *Contact:* ${email.slice(0, 150)}`,
     ``,
     `👥 *Audience:* ${(podcast.audience || 'N/A').slice(0, 200)}`,
@@ -947,6 +965,12 @@ Return pure JSON array only. No backticks. No markdown.
         `No qualifying podcasts for *"${text}"*.\nTry broader keywords.`);
       return;
     }
+
+    // Add a real Apple Podcasts link to each result
+    await Promise.all(podcasts.map(async (p) => {
+      const info = await fetchAppleInfo(p.title);
+      p.apple_url = info.appleUrl;
+    }));
 
     const appleCount = podcasts.filter((p) => p.apple_chart_rank).length;
     const stats = await db.getStats();
