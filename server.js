@@ -321,11 +321,13 @@ async function generatePitchEmail(
 
   let template = '';
   if (emailNumber === 1) {
-    template = TREVOR_CONTEXT.pitchTemplates.email1('[HOST_NAME]', '[SPECIFIC_TO_PODCAST]');
+    template = TREVOR_CONTEXT.pitchTemplates[templateLetter].email1('[HOST_NAME]');
   } else if (emailNumber === 2) {
-    template = TREVOR_CONTEXT.pitchTemplates.email2('[HOST_NAME]', '[EPISODE_TOPIC_ANGLE]');
+    template = TREVOR_CONTEXT.pitchTemplates.email2('[HOST_NAME]');
   } else if (emailNumber === 3) {
-    template = TREVOR_CONTEXT.pitchTemplates.email3('[HOST_NAME]', '[EPISODE_TOPIC_ANGLE]');
+    template = TREVOR_CONTEXT.pitchTemplates.email3('[HOST_NAME]');
+  } else if (emailNumber === 4) {
+    template = TREVOR_CONTEXT.pitchTemplates.email4('[HOST_NAME]');
   }
 
   const prompt = `
@@ -364,7 +366,7 @@ ${template}
 
   const response = await client.messages.create({
     model: 'claude-opus-4-5',
-    max_tokens: 3000,
+    max_tokens: 4000,
     messages: [{ role: 'user', content: prompt }],
   });
 
@@ -600,7 +602,7 @@ function buildApproveNotesForm(podcastTitle) {
 // ── BUILD EMAIL BLOCK ────────────────────────────────────
 function buildEmailBlock(podcastTitle, emailNumber, pitchData, podcastData) {
   const nextEmailNumber = emailNumber + 1;
-  const hasNextEmail = nextEmailNumber <= 3;
+  const hasNextEmail = nextEmailNumber <= 4;
 
   const blocks = [
     {
@@ -648,7 +650,7 @@ function buildEmailBlock(podcastTitle, emailNumber, pitchData, podcastData) {
         type: 'button',
         text: {
           type: 'plain_text',
-          text: `📧 Generate Email ${nextEmailNumber} — Follow-up ${nextEmailNumber === 2 ? '(Day 7)' : '(Day 14)'}`,
+          text: `📧 Generate Email ${nextEmailNumber} — Follow-up ${nextEmailNumber === 2 ? '(Day 7)' : nextEmailNumber === 3 ? '(Day 14)' : '(1 Month)'}`,
           emoji: true,
         },
         style: 'primary',
@@ -671,7 +673,7 @@ function buildEmailBlock(podcastTitle, emailNumber, pitchData, podcastData) {
       type: 'context',
       elements: [{
         type: 'mrkdwn',
-        text: '✅ All 3 emails generated. Send manually from trevor@theartofhealingbytrevor.com',
+        text: '✅ All 4 emails generated. Send manually from trevor@theartofhealingbytrevor.com',
       }],
     });
   }
