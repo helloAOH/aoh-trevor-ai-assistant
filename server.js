@@ -604,6 +604,19 @@ function buildApproveNotesForm(podcastTitle) {
 }
 
 // ── BUILD EMAIL BLOCK ────────────────────────────────────
+// ── SPLIT LONG TEXT INTO SLACK-SAFE CHUNKS (3000 char limit) ──
+function splitIntoBlocks(content, maxLen = 2900) {
+  const chunks = [];
+  let remaining = content || '';
+  while (remaining.length > 0) {
+    if (remaining.length <= maxLen) { chunks.push(remaining); break; }
+    let splitAt = remaining.lastIndexOf('\n', maxLen);
+    if (splitAt <= 0) splitAt = maxLen;
+    chunks.push(remaining.slice(0, splitAt));
+    remaining = remaining.slice(splitAt);
+  }
+  return chunks;
+}
 function buildEmailBlock(podcastTitle, emailNumber, pitchData, podcastData) {
   const nextEmailNumber = emailNumber + 1;
   const hasNextEmail = nextEmailNumber <= 4;
@@ -638,14 +651,15 @@ function buildEmailBlock(podcastTitle, emailNumber, pitchData, podcastData) {
         text: "⚠️ *DRAFT ONLY — Review before sending manually from Trevor's email.*",
       }],
     },
-    {
+   ];
+
+  // Split long email content into Slack-safe chunks (3000-char block limit)
+  splitIntoBlocks(pitchData.email_content, 2900).forEach((chunk) => {
+    blocks.push({
       type: 'section',
-      text: {
-        type: 'mrkdwn',
-        text: '```' + pitchData.email_content + '```',
-      },
-    },
-  ];
+      text: { type: 'mrkdwn', text: '```' + chunk + '```' },
+    });
+  });
 
   if (hasNextEmail) {
     blocks.push({
