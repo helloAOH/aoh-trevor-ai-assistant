@@ -455,6 +455,7 @@ function buildPodcastBlock(podcast, index) {
     listen_score: podcast.quality_score || 0,
     tier: podcast.tier || null,
     recommended_angle: podcast.recommended_angle || null,
+    contact_email: podcast.contact_email || null,
   });
 
   return [
@@ -620,6 +621,10 @@ function splitIntoBlocks(content, maxLen = 2900) {
 function buildEmailBlock(podcastTitle, emailNumber, pitchData, podcastData) {
   const nextEmailNumber = emailNumber + 1;
   const hasNextEmail = nextEmailNumber <= 4;
+  // Tier + template info for the email header
+  const templateLetter = TREVOR_CONTEXT.pitchTemplates.tierToTemplate[podcastData.tier] || 'A';
+  const tierInfo = TREVOR_CONTEXT.tiers.find((t) => t.tier === podcastData.tier);
+  const tierName = tierInfo ? tierInfo.name : 'General';
 
   const blocks = [
     {
@@ -634,7 +639,14 @@ function buildEmailBlock(podcastTitle, emailNumber, pitchData, podcastData) {
       type: 'section',
       fields: [
         { type: 'mrkdwn', text: `*From:*\ntrevor@theartofhealingbytrevor.com` },
-        { type: 'mrkdwn', text: `*To:*\n${podcastTitle.slice(0, 50)}` },
+        { type: 'mrkdwn', text: `*To:*\n${podcastData.contact_email || 'No email found — check website'}` },
+      ],
+    },
+    {
+      type: 'section',
+      fields: [
+        { type: 'mrkdwn', text: `*Tier:*\nTier ${podcastData.tier || '?'} — ${tierName}` },
+        { type: 'mrkdwn', text: `*Template:*\nTemplate ${templateLetter}` },
       ],
     },
     {
@@ -683,6 +695,7 @@ function buildEmailBlock(podcastTitle, emailNumber, pitchData, podcastData) {
           chosenAngle: pitchData.chosen_angle,
           angleTopic: pitchData.angle_topic,
           tier: podcastData.tier || null,
+          contact_email: podcastData.contact_email || null,
         }),
       }],
     });
