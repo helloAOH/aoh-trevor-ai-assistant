@@ -25,7 +25,7 @@ const TREVOR_CONTEXT = {
     ig: 'https://instagram.com/theartofhealingbytrevor',
     tiktok: 'https://tiktok.com/@theartofhealingbytrevor',
     podcastGuestAssets: 'https://drive.google.com/drive/folders/1c2XjYvqmhyCacmYQs0CYSGgJihKScEN4?usp=sharing',
-    mediaKit: 'https://www.canva.com/design/DAG_z60YbU8/Ylj_Jiy0wZVOcC0kN_jtng/view?utm_content=DAG_z60YbU8&utm_campaign=designshare&utm_medium=link2&utm_source=uniquelinks&utlId=h09d71ceff5',
+    mediaKit: 'https://drive.google.com/file/d/1-wBCPMKH6BxXLVHeOsbBp6jw3Eg1yQSo/view?usp=drive_link',
     reels: {
       danicaPatrick: 'https://youtube.com/shorts/JCeA0pSwcxE?si=VNU0rBlxeSnoyrcB',
       whatFreshHell: 'https://youtube.com/shorts/Q1Vqj1E4SDE?si=SDKS06i5szKP_4K2',
