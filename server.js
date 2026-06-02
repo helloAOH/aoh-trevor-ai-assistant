@@ -136,6 +136,9 @@ async function searchListenNotes(keywords, maxResults = 10) {
       language: 'English',
       source: 'ListenNotes',
       contact_email: null,
+      earliest_pub_date_ms: p.earliest_pub_date_ms || null,
+      latest_pub_date_ms: p.latest_pub_date_ms || null,
+      itunes_id: p.itunes_id || null,
     }));
     console.log(`ListenNotes returned ${results.length} results`);
     return results;
@@ -205,6 +208,21 @@ async function searchPodchaser(keywords, maxResults = 10) {
 }
 
 // ── COMBINE BOTH SOURCES ──────────────────────────────────
+
+// ── MATCH A PODCAST TO THE REAL APPLE TOP 100 (by name) ──
+function matchAppleTop100(title, topList) {
+  if (!title || !topList || topList.length === 0) return null;
+  const norm = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const t = norm(title);
+  if (!t) return null;
+  for (const item of topList) {
+    const n = norm(item.name);
+    if (n && (n === t || n.includes(t) || t.includes(n))) {
+      return item.rank;
+    }
+  }
+  return null;
+}
 async function search_podcasts({ keywords, max_results = 10 }) {
   console.log(`Combined search for: ${keywords}`);
 
@@ -987,6 +1005,11 @@ Return pure JSON array only. No backticks. No markdown.
       const info = await fetchAppleInfo(p.title);
       p.apple_url = info.appleUrl;
     }));
+    // Real Apple Top 100 rank (code-computed — overrides any Claude guess)
+    podcasts.forEach((p) => {
+      p.apple_chart_rank = matchAppleTop100(p.title, appleCharts.top);
+      console.log(`Apple Top 100 check: ${p.title} -> ${p.apple_chart_rank || 'not charting'}`);
+    });
 
     const appleCount = podcasts.filter((p) => p.apple_chart_rank).length;
     const stats = await db.getStats();
