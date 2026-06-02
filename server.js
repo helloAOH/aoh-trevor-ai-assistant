@@ -897,6 +897,15 @@ GUARDRAILS:
 - Find and evaluate podcasts only. Do NOT send emails.
 - English language podcasts ONLY.
 
+DATA ACCURACY RULES (CRITICAL):
+- Only state FACTS that are present in the search data you were given.
+- NEVER invent ratings, review counts, follower counts, host names, or email addresses.
+- If a fact is not in the data, write "Unknown" — do NOT guess.
+- You MAY judge audience, fit, alignment, and authority from the description — clearly as your assessment, not as hard facts.
+- Episode count: use the provided total_episodes.
+- Longevity: use earliest_pub_date_ms and latest_pub_date_ms (Unix timestamps in milliseconds) to report the first episode date, latest episode date, and years running. If those dates are missing, write "Unknown" and score Longevity 0.
+- Contact email: use ONLY an email present in the data (Podchaser contact_email, or one found in the description). If none exists, set it to null. NEVER guess an email.
+
 ABOUT TREVOR:
 ${TREVOR_CONTEXT.bio}
 
@@ -909,26 +918,22 @@ ${tiersText}
 
 ${appleChartsText}
 
-APPLE CHART BONUS:
-- #1-25 = +3 pts | #26-50 = +1.5 pts | Not on charts = +0 pts
+SCORING (base out of 7 + bonuses) — score ONLY on real data or honest judgment:
+- Episodes (real): 500+=2 | 200-499=1.5 | 100-199=1 | <100=0.5
+- Longevity (real, from episode dates): 4+yrs=2 | 2-3yrs=1 | <2yrs=0.5 | unknown=0
+- Alignment with Trevor (your judgment from description): Perfect=2 | Good=1 | Weak=0
+- Niche Authority (your judgment): THE go-to show=1 | one of many=0.5
+- Do NOT score social/follower size — we cannot verify it.
 
-APPLE RATINGS BONUS:
-- 4.8+ stars with 100+ reviews = +1.5 pts
-- 4.5+ stars with 50+ reviews = +1 pt
-- Under 50 reviews = 0 pts (only include if on Apple Charts)
+APPLE TOP 100 BONUS (only if the show appears in the US TOP 100 list above):
+- #1-25 = +3 | #26-50 = +1.5 | #51-100 = +0.5 | not listed = +0
 
-SCORING (base out of 7 + bonuses):
-- Episodes: 500+=2 | 200-499=1.5 | 100-199=1 | <100=0.5
-- Longevity: 4+yrs=1 | 2-3yrs=0.5 | <2yrs=0
-- Social: 100k+=2 | 50-100k=1.5 | 10-50k=1 | unknown=0.5
-- Authority: Top show=1 | One of many=0.5
-- Alignment: Perfect=1 | Good=0.5 | Weak=0
-- Tiers 3 and 4 priority bonus: +0.5
+TIER PRIORITY BONUS:
+- Tier 3 or Tier 4 = +0.5
 
-Minimum score: 5.5
-Apple Top 50 shows qualify at base score 4.5+
-
-CONTACT EMAIL: Use Podchaser contact_email first, then description, then guess.
+Minimum score to include: 5.5
+Shows in the Apple US Top 100 qualify at base score 4.5+.
+Cap quality_score at 10.
 
 EXCLUDE: ${allExcluded.join(', ')}
 
@@ -939,20 +944,17 @@ Return pure JSON array only. No backticks. No markdown.
 [
   {
     "title": "podcast name",
-    "website": "url",
+    "website": "url from the data",
     "description": "2-3 sentences",
-    "audience": "who listens, financial profile",
-    "summary": "why Trevor fits specifically",
+    "audience": "your assessment of who listens + financial profile (judgment)",
+    "summary": "why Trevor fits specifically (judgment)",
     "total_episodes": 250,
+    "first_episode_date": "Mar 2019 or Unknown",
+    "latest_episode_date": "May 2026 or Unknown",
+    "years_running": "7 or Unknown",
     "quality_score": 8,
-    "score_breakdown": "Episodes:1.5|Longevity:1|Social:2|Authority:1|Alignment:1|Apple:1.5",
-    "years_running": "5 years",
-    "notable_guests": "names",
-    "host_social_following": "150k Instagram",
-    "apple_chart_rank": 15,
-    "apple_review_count": "2500+ reviews",
-    "apple_rating": "4.8 stars",
-    "contact_email": "contact@podcast.com",
+    "score_breakdown": "Episodes:1.5|Longevity:2|Alignment:2|Authority:1|AppleTop100:0|TierBonus:0",
+    "contact_email": "email from data or null",
     "source": "ListenNotes",
     "language": "English",
     "tier": 1,
