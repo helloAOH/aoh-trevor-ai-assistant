@@ -333,7 +333,7 @@ async function askClaude(userMessage) {
 // ── GENERATE PITCH EMAIL ─────────────────────────────────
 async function generatePitchEmail(
   podcastName, podcastDescription, podcastAudience,
-  emailNumber, hostName, chosenAngle, tier
+  emailNumber, hostName, chosenAngle, tier, tone
 ) {
   const client = new Anthropic.Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -371,6 +371,15 @@ async function generatePitchEmail(
     B: 'Audience: career-driven high achievers and entrepreneurs who win at work but struggle in love. Lean into the tension between outer success and inner/relationship struggle. Performance, patterns, and ROI language fits well here.',
     C: 'Audience: Christian women seeking faith-integrated growth, healing, and godly relationships. Weave faith in naturally and respectfully. Warm, honest, grounded in both faith and practical truth.',
   }[templateLetter] || '';
+  // Tone override (set when the user clicks a tone button)
+  let toneDirective = '';
+  if (tone === 'expert') {
+    toneDirective = 'TONE OVERRIDE: Write in an EXPERT / EARNEST tone — therapy-informed, deeper, more authoritative and credible. Minimize jokes.';
+  } else if (tone === 'conversational') {
+    toneDirective = 'TONE OVERRIDE: Write in a CONVERSATIONAL tone — warm, friendly, accessible, balanced. Not clinical, not jokey.';
+  } else if (tone === 'playful') {
+    toneDirective = 'TONE OVERRIDE: Write in a PLAYFUL tone — lighter, funnier, casual and relatable, with personality (still professional enough for a licensed therapist).';
+  }
 
   const prompt = `
 GUARDRAIL: Draft for human review only. Will NOT be sent automatically.
@@ -387,6 +396,8 @@ ${chosenAngle ? `Previously chosen angle: ${chosenAngle}` : ''}
 
 TIER GUIDANCE
 ${audienceGuidance}
+
+${toneDirective}
 
 YOUR TASK
 Read the show above, get a feel for its tone and audience, and REWRITE the template below so every sentence feels native to THIS show — while keeping the exact same structure, sections, and order. This is a full rewrite, not a fill-in-the-blank. If a sentence doesn't translate cleanly into the show's tone, rewrite it from scratch.
@@ -724,6 +735,30 @@ function buildEmailBlock(podcastTitle, emailNumber, pitchData, podcastData) {
       type: 'section',
       text: { type: 'mrkdwn', text: '```' + chunk + '```' },
     });
+  });
+  // Tone toggle buttons — regenerate THIS email in a chosen tone
+  blocks.push({
+    type: 'actions',
+    elements: [
+      { tone: 'expert', label: '🎓 Expert' },
+      { tone: 'conversational', label: '💬 Conversational' },
+      { tone: 'playful', label: '😄 Playful' },
+    ].map((opt) => ({
+      type: 'button',
+      text: { type: 'plain_text', text: opt.label, emoji: true },
+      action_id: `tone_${opt.tone}`,
+      value: JSON.stringify({
+        title: podcastData.title,
+        description: (podcastData.description || '').slice(0, 300),
+        audience: (podcastData.audience || '').slice(0, 200),
+        tier: podcastData.tier || null,
+        contact_email: podcastData.contact_email || null,
+        emailNumber: emailNumber,
+        hostName: pitchData.host_name,
+        chosenAngle: pitchData.chosen_angle,
+        tone: opt.tone,
+      }),
+    })),
   });
 
   if (hasNextEmail) {
@@ -1437,6 +1472,33 @@ app.post('/slack/actions', async (req, res) => {
         [{ type: 'section', text: { type: 'mrkdwn',
           text: `❌ Could not generate Email ${emailNumber}: ${error.message}` }}],
         'Email failed'
+      );
+    }
+  }
+  // ── REGENERATE EMAIL IN A CHOSEN TONE ──────────────────
+  if (actionId.startsWith('tone_')) {
+    const data = JSON.parse(action.value);
+    const tone = data.tone;
+
+    await postToSlackChannel(channelId,
+      [{ type: 'section', text: { type: 'mrkdwn',
+        text: `⏳ Rewriting Email ${data.emailNumber} for *${data.title}* in *${tone}* tone...` }}],
+      `Regenerating in ${tone} tone`
+    );
+
+    try {
+      const pitchData = await generatePitchEmail(
+        data.title, data.description, data.audience,
+        data.emailNumber, data.hostName, data.chosenAngle, data.tier, tone
+      );
+      await db.savePitchEmail(data.title, data.emailNumber, pitchData.email_content);
+      const emailBlocks = buildEmailBlock(data.title, data.emailNumber, pitchData, data);
+      await postToSlackChannel(channelId, emailBlocks, `Email ${data.emailNumber} (${tone}) for ${data.title}`);
+    } catch (error) {
+      await postToSlackChannel(channelId,
+        [{ type: 'section', text: { type: 'mrkdwn',
+          text: `❌ Could not regenerate: ${error.message}` }}],
+        'Regenerate failed'
       );
     }
   }
