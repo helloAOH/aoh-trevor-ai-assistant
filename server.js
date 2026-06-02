@@ -347,37 +347,58 @@ async function generatePitchEmail(
     template = TREVOR_CONTEXT.pitchTemplates.email4('[HOST_NAME]');
   }
 
+  // Tier audience guidance for the rewrite (based on which template is used)
+  const audienceGuidance = {
+    A: 'Audience: people working on relationships, dating, attachment, self-worth, and personal growth. They want relatable, honest, practical insight. Keep it warm and human; avoid heavy clinical jargon unless the show itself is clearly clinical.',
+    B: 'Audience: career-driven high achievers and entrepreneurs who win at work but struggle in love. Lean into the tension between outer success and inner/relationship struggle. Performance, patterns, and ROI language fits well here.',
+    C: 'Audience: Christian women seeking faith-integrated growth, healing, and godly relationships. Weave faith in naturally and respectfully. Warm, honest, grounded in both faith and practical truth.',
+  }[templateLetter] || '';
+
   const prompt = `
 GUARDRAIL: Draft for human review only. Will NOT be sent automatically.
 
-Help Trevor Hanson pitch himself as a guest on "${podcastName}".
+You are an expert podcast-pitch copywriter. Rewrite Trevor Hanson's guest-pitch email so it feels completely native to a specific show's audience and tone.
 
-Podcast description: ${podcastDescription}
-Podcast audience: ${podcastAudience || 'Not specified'}
+THE SHOW
+Name: "${podcastName}"
+Description: ${podcastDescription}
+Audience: ${podcastAudience || 'Not specified'}
 Host name: ${hostName || podcastName}
 Email number: ${emailNumber}
 ${chosenAngle ? `Previously chosen angle: ${chosenAngle}` : ''}
 
-Available angles:
+TIER GUIDANCE
+${audienceGuidance}
+
+YOUR TASK
+Read the show above, get a feel for its tone and audience, and REWRITE the template below so every sentence feels native to THIS show — while keeping the exact same structure, sections, and order. This is a full rewrite, not a fill-in-the-blank. If a sentence doesn't translate cleanly into the show's tone, rewrite it from scratch.
+
+REWRITE RULES
+- Keep the same structure and section order as the template (subject, hook, pain-point bullets, story, proposal + topic options, promotion, sign-off, PS).
+- Rewrite the subject line in the audience's language (under 12 words).
+- Replace the pain-point bullets with ones THIS audience specifically struggles with.
+- Keep Trevor's actual story events (shattered jaw, Tesla layoff, broken engagement, master's in marriage & family therapy, licensed therapist/coach) — but reframe how they're introduced to fit the audience.
+- Rewrite the topic options so they're compelling for this audience (keep the core: attachment, confidence, relationships, self-trust).
+- Match the show's tone: lighter and funnier for casual/comedy shows; deeper or clinical only if the show is clearly clinical; faith-integrated for Christian shows.
+- Replace [HOST_NAME] with the host's name.
+
+NEVER
+- Never invent credentials, claims, results, or offers that aren't in the template.
+- Never change or remove the promotion links or the PS links — keep every <https://...> exactly as written.
+- In the promotion section, use these EXACT current social stats and ignore any follower numbers in the template (ig = Instagram, fb = Facebook, tiktok = TikTok, newsletter = email subscribers): ${socialStatsLine || 'leave template numbers as-is'}
+
+Available angles (pick the best fit for this show):
 ${anglesText}
 
-Instructions:
-- Email 1: Replace [HOST_NAME] and [SPECIFIC_TO_PODCAST] (8-12 words)
-- Email 2 and 3: Replace [HOST_NAME] and [EPISODE_TOPIC_ANGLE]
-- Keep everything else exactly as written
-- IMPORTANT: In the promotion section, use these EXACT current social stats and ignore any follower numbers already in the template (ig = Instagram, fb = Facebook, tiktok = TikTok, newsletter = email subscribers): ${socialStatsLine || 'leave template numbers as-is'}
-- Match Trevor's voice: warm, direct, confident
-
-Return JSON only — no backticks no markdown:
+Return JSON only — no backticks, no markdown:
 {
   "chosen_angle": "angle_id",
-  "angle_topic": "full topic text",
-  "specific_to_podcast": "8-12 word phrase",
+  "angle_topic": "the topic/title you led with",
   "host_name": "host name used",
-  "email_content": "complete email with all links"
+  "email_content": "the complete rewritten email with all links"
 }
 
-Template:
+TEMPLATE TO REWRITE:
 ${template}
   `.trim();
 
