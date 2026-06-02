@@ -420,13 +420,13 @@ NEVER
 Available angles (pick the best fit for this show):
 ${anglesText}
 
-Return JSON only — no backticks, no markdown:
-{
-  "chosen_angle": "angle_id",
-  "angle_topic": "the topic/title you led with",
-  "host_name": "host name used",
-  "email_content": "the complete rewritten email with all links"
-}
+Return your answer in EXACTLY this format. Do NOT use JSON. Do NOT use backticks.
+
+ANGLE_ID: (the angle id you chose, e.g. angle_5)
+ANGLE_TOPIC: (the topic or subject line you led with)
+HOST_NAME: (the host name you used)
+---EMAIL BELOW---
+(the complete rewritten email, with normal line breaks and all links exactly as written)
 
 TEMPLATE TO REWRITE:
 ${template}
@@ -439,15 +439,32 @@ ${template}
   });
 
   const text = response.content[0].text;
-  const cleaned = text.replace(/```json/g, '').replace(/```/g, '').trim();
 
-  try {
-    const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
-    if (jsonMatch) return JSON.parse(jsonMatch[0]);
-  } catch (e) {
-    console.error('Could not parse pitch JSON:', e.message);
+  // Parse the delimited format (robust — no JSON escaping issues)
+  const splitMarker = '---EMAIL BELOW---';
+  let emailContent = text.trim();
+  let chosenAngleId = chosenAngle || 'angle_1';
+  let angleTopic = '';
+  let usedHostName = hostName || podcastName;
+
+  if (text.includes(splitMarker)) {
+    const parts = text.split(splitMarker);
+    const headerPart = parts[0];
+    emailContent = parts.slice(1).join(splitMarker).trim();
+    const angleMatch = headerPart.match(/ANGLE_ID:\s*(.+)/i);
+    const topicMatch = headerPart.match(/ANGLE_TOPIC:\s*(.+)/i);
+    const hostMatch = headerPart.match(/HOST_NAME:\s*(.+)/i);
+    if (angleMatch) chosenAngleId = angleMatch[1].trim();
+    if (topicMatch) angleTopic = topicMatch[1].trim();
+    if (hostMatch) usedHostName = hostMatch[1].trim();
   }
-  return { email_content: text, chosen_angle: 'angle_1', host_name: hostName || podcastName };
+
+  return {
+    chosen_angle: chosenAngleId,
+    angle_topic: angleTopic,
+    host_name: usedHostName,
+    email_content: emailContent,
+  };
 }
 
 
