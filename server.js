@@ -399,6 +399,7 @@ REWRITE RULES
 - Rewrite the topic options so they're compelling for this audience (keep the core: attachment, confidence, relationships, self-trust).
 - Match the show's tone: lighter and funnier for casual/comedy shows; deeper or clinical only if the show is clearly clinical; faith-integrated for Christian shows.
 - Replace [HOST_NAME] with the host's name.
+- Formatting: put each bullet on its own line, and keep a blank line between sections (especially before the promotion bullets, the sign-off, and the PS). Never merge a sentence and a bullet onto the same line.
 
 NEVER
 - Never invent credentials, claims, results, or offers that aren't in the template.
