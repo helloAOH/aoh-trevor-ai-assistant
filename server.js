@@ -527,10 +527,36 @@ function buildPodcastBlock(podcast, index) {
   const appleBadge = podcast.apple_chart_rank
     ? ` | 🍎 Apple #${podcast.apple_chart_rank}` : '';
 
-  const email = podcast.contact_email &&
-    podcast.contact_email !== 'Not found'
-    ? podcast.contact_email
-    : 'Not found — check website';
+  // Gather all found emails with their source (cross-check 2+ sources)
+  const foundEmails = [];
+  const seenEmails = new Set();
+  const addEmail = (em, src) => {
+    if (!em) return;
+    const key = em.trim().toLowerCase();
+    if (!key.includes('@') || key === 'not found' || seenEmails.has(key)) return;
+    seenEmails.add(key);
+    foundEmails.push({ email: em.trim(), source: src });
+  };
+  addEmail(podcast.contact_email, 'show notes / listing');
+  addEmail(
+    podcast.rss_email,
+    podcast.rss_email && podcast.rss_email.includes('anchor.fm')
+      ? 'RSS owner (auto-relay — verify)'
+      : 'RSS owner'
+  );
+
+  const emailsDisplay = foundEmails.length > 0
+    ? foundEmails.map((f) => `• ${f.email}  _(${f.source})_`).join('\n')
+    : '_None auto-found — use the links below_';
+
+  const ytSearch = `https://www.youtube.com/results?search_query=${encodeURIComponent(podcast.title)}`;
+  const googleSearch = `https://www.google.com/search?q=${encodeURIComponent(podcast.title + ' podcast contact email')}`;
+  const verifyLinks = [
+    podcast.website && podcast.website !== 'N/A' ? `<${podcast.website}|Website>` : null,
+    podcast.apple_url ? `<${podcast.apple_url}|Apple>` : null,
+    `<${ytSearch}|YouTube>`,
+    `<${googleSearch}|Google>`,
+  ].filter(Boolean).join(' · ');
 
   const tierName = TREVOR_CONTEXT.tiers.find(
     (t) => t.tier === podcast.tier
@@ -544,7 +570,8 @@ function buildPodcastBlock(podcast, index) {
    `🎙️ *Episodes:* ${podcast.total_episodes || 'Unknown'}`,
     `📅 *Running:* ${podcast.first_episode_date || 'Unknown'} → ${podcast.latest_episode_date || 'Unknown'}${podcast.years_running && podcast.years_running !== 'Unknown' ? ` (~${podcast.years_running} yrs)` : ''}`,
     `📈 *Reach:* ${podcast.apple_chart_rank ? `🍎 In Apple Top 100 (#${podcast.apple_chart_rank})` : 'Not in Apple Top 100'}${podcast.apple_url ? ` — <${podcast.apple_url}|Verify on Apple>` : ''}`,
-    `📧 *Contact:* ${email.slice(0, 150)}`,
+    `📧 *Emails found:*\n${emailsDisplay}`,
+    `🔎 *Verify / find more:* ${verifyLinks}`,
     ``,
     `👥 *Audience:* ${(podcast.audience || 'N/A').slice(0, 200)}`,
     ``,
@@ -562,7 +589,7 @@ function buildPodcastBlock(podcast, index) {
     listen_score: podcast.quality_score || 0,
     tier: podcast.tier || null,
     recommended_angle: podcast.recommended_angle || null,
-    contact_email: podcast.contact_email || null,
+    contact_email: podcast.contact_email || podcast.rss_email || null,
   });
 
   return [
@@ -1087,10 +1114,7 @@ Return pure JSON array only. No backticks. No markdown.
       p.apple_url = info.appleUrl;
       p.rss_email = info.rssEmail;
       p.rss_author = info.rssAuthor;
-      // If Claude didn't find a real email, fall back to the RSS owner email
-      if (!p.contact_email && info.rssEmail) {
-        p.contact_email = info.rssEmail;
-      }
+      
       console.log(`RSS email for ${p.title}: ${info.rssEmail || 'none'}`);
     }));
     // Real Apple Top 100 rank (code-computed — overrides any Claude guess)
