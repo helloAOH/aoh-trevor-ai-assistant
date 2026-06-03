@@ -93,22 +93,48 @@ function formatAppleChartsForClaude(charts) {
   return text;
 }
 
-// ── GET REAL APPLE PODCASTS LINK (free iTunes Search API) ──
+// ── GET APPLE LINK + RSS OWNER EMAIL (free) ──────────────
 async function fetchAppleInfo(title) {
+  const fallback = {
+    appleUrl: `https://podcasts.apple.com/us/search?term=${encodeURIComponent(title)}`,
+    feedUrl: null, rssEmail: null, rssAuthor: null,
+  };
   try {
     const response = await axios.get('https://itunes.apple.com/search', {
       params: { term: title, entity: 'podcast', limit: 1 },
       timeout: 8000,
     });
     const result = response.data?.results?.[0];
-    if (result?.collectionViewUrl) {
-      return { appleUrl: result.collectionViewUrl };
+    if (!result) return fallback;
+
+    const info = {
+      appleUrl: result.collectionViewUrl || fallback.appleUrl,
+      feedUrl: result.feedUrl || null,
+      rssEmail: null,
+      rssAuthor: result.artistName || null,
+    };
+
+    // Read the owner email straight from the RSS feed (often the real booking email)
+    if (result.feedUrl) {
+      try {
+        const feed = await axios.get(result.feedUrl, {
+          timeout: 8000,
+          headers: { 'User-Agent': 'Mozilla/5.0 (compatible; PodcastBot/1.0)' },
+        });
+        const xml = typeof feed.data === 'string' ? feed.data : '';
+        const emailMatch = xml.match(/<itunes:email>\s*([^<\s]+@[^<\s]+)\s*<\/itunes:email>/i);
+        if (emailMatch) info.rssEmail = emailMatch[1].trim();
+        const authorMatch = xml.match(/<itunes:author>\s*([^<]+?)\s*<\/itunes:author>/i);
+        if (authorMatch) info.rssAuthor = authorMatch[1].trim();
+      } catch (e) {
+        console.error('RSS fetch error:', e.message);
+      }
     }
+    return info;
   } catch (err) {
     console.error('iTunes lookup error:', err.message);
   }
-  // Fallback: an Apple Podcasts search link (always works)
-  return { appleUrl: `https://podcasts.apple.com/us/search?term=${encodeURIComponent(title)}` };
+  return fallback;
 }
 
 // ── SEARCH PODCASTS VIA LISTENNOTES ──────────────────────
@@ -1059,6 +1085,13 @@ Return pure JSON array only. No backticks. No markdown.
     await Promise.all(podcasts.map(async (p) => {
       const info = await fetchAppleInfo(p.title);
       p.apple_url = info.appleUrl;
+      p.rss_email = info.rssEmail;
+      p.rss_author = info.rssAuthor;
+      // If Claude didn't find a real email, fall back to the RSS owner email
+      if (!p.contact_email && info.rssEmail) {
+        p.contact_email = info.rssEmail;
+      }
+      console.log(`RSS email for ${p.title}: ${info.rssEmail || 'none'}`);
     }));
     // Real Apple Top 100 rank (code-computed — overrides any Claude guess)
     podcasts.forEach((p) => {
