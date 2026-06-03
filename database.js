@@ -159,6 +159,22 @@ async function saveGeneralFeedback(feedbackText, submittedBy, category) {
   );
 }
 
+// ── HUNTER EMAIL STORE ───────────────────────────────────
+async function saveHunterEmail(podcastTitle, email) {
+  await pool.query(
+    `INSERT INTO hunter_emails (podcast_title, email) VALUES ($1, $2)`,
+    [podcastTitle, email]
+  );
+}
+
+async function getHunterEmail(podcastTitle) {
+  const result = await pool.query(
+    `SELECT email FROM hunter_emails WHERE podcast_title = $1
+     ORDER BY created_at DESC LIMIT 1`,
+    [podcastTitle]
+  );
+  return result.rows[0] ? result.rows[0].email : null;
+}
 // ── SAVE / GET OUTREACH RECORD (Notion link) ─────────────
 async function saveOutreachRecord(podcastTitle, notionPageId, tier) {
   await pool.query(
@@ -337,4 +353,6 @@ module.exports = {
   setSystemPreference,
   saveOutreachRecord,
   getNotionPageId,
+  saveHunterEmail,
+  getHunterEmail,
 };
