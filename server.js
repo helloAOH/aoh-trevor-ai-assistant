@@ -485,7 +485,10 @@ async function createNotionRow(podcast) {
     return null;
   }
   const templateLetter = TREVOR_CONTEXT.pitchTemplates.tierToTemplate[podcast.tier] || 'A';
-  const emailsFound = [podcast.contact_email].filter(Boolean).join(', ') || 'None yet — verify';
+  let hunterEmail = null;
+  try { hunterEmail = await db.getHunterEmail(podcast.title); } catch (e) {}
+  const emailList = [podcast.contact_email, hunterEmail].filter(Boolean);
+  const emailsFound = emailList.length ? emailList.join(', ') : 'None yet — verify';
 
   const properties = {
     Podcast: { title: [{ text: { content: (podcast.title || 'Untitled').slice(0, 200) } }] },
@@ -1797,10 +1800,26 @@ app.post('/slack/actions', async (req, res) => {
     const result = await hunterFindEmails(data.website);
     let msg;
     if (result.emails && result.emails.length > 0) {
+      const emailsStr = result.emails.map((e) => e.email).join(', ');
+      try { await db.saveHunterEmail(data.title, result.emails[0].email); } catch (e) {}
+      // If this podcast already has a Notion row, update its Emails Found now
+      try {
+        const pageId = await db.getNotionPageId(data.title);
+        if (pageId) {
+          await axios.patch(
+            `${NOTION_API}/pages/${pageId}`,
+            { properties: { 'Emails Found': { rich_text: [{ text: { content: emailsStr.slice(0, 1900) } }] } } },
+            { headers: notionHeaders() }
+          );
+        }
+      } catch (e) {
+        console.error('Notion hunter update error:', e.message);
+      }
+
       const list = result.emails
         .map((e) => `• ${e.email}  _(${e.confidence || '?'}% confidence, ${e.type || 'unknown'})_`)
         .join('\n');
-      msg = `📧 *Hunter found for ${data.title}* (domain: ${result.domain}):\n${list}\n_Verify before using._`;
+      msg = `📧 *Hunter found for ${data.title}* (domain: ${result.domain}):\n${list}\n_Saved → will appear in Notion. Verify before using._`;
     } else {
       msg = `❌ Hunter found no emails for *${data.title}*${result.error ? ` (${result.error})` : ''}.`;
     }
