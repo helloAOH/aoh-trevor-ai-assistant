@@ -249,29 +249,62 @@ function matchAppleTop100(title, topList) {
   }
   return null;
 }
+
+// ── SEARCH PODCASTS VIA APPLE / iTUNES (free, no key) ─────
+async function searchAppleITunes(keywords, maxResults = 10) {
+  try {
+    console.log(`Apple iTunes searching for: ${keywords}`);
+    const response = await axios.get('https://itunes.apple.com/search', {
+      params: { term: keywords, entity: 'podcast', limit: maxResults },
+      timeout: 10000,
+    });
+    const results = (response.data?.results || []).map((p) => ({
+      title: p.collectionName || p.trackName || '',
+      description: p.genres ? `Genres: ${p.genres.join(', ')}.` : '',
+      website: p.collectionViewUrl || 'N/A',
+      total_episodes: p.trackCount || 0,
+      publisher: p.artistName || '',
+      language: 'English',
+      source: 'Apple',
+      contact_email: null,
+      feedUrl: p.feedUrl || null,
+      apple_url: p.collectionViewUrl || null,
+    }));
+    console.log(`Apple iTunes returned ${results.length} results`);
+    return results.filter((r) => r.title);
+  } catch (err) {
+    console.error('Apple iTunes error:', err.message);
+    return [];
+  }
+}
 async function search_podcasts({ keywords, max_results = 10 }) {
   console.log(`Combined search for: ${keywords}`);
 
-  const [listenNotesResults, podchaserResults] = await Promise.all([
+  const [listenNotesResults, podchaserResults, appleResults] = await Promise.all([
     searchListenNotes(keywords, max_results),
     searchPodchaser(keywords, max_results),
+    searchAppleITunes(keywords, max_results),
   ]);
 
-  const allResults = [...listenNotesResults];
-  const existingTitles = new Set(
-    listenNotesResults.map((p) => p.title.toLowerCase().trim())
-  );
-
-  podchaserResults.forEach((p) => {
-    if (!existingTitles.has(p.title.toLowerCase().trim())) {
-      allResults.push(p);
-      existingTitles.add(p.title.toLowerCase().trim());
-    }
-  });
+  const allResults = [];
+  const existingTitles = new Set();
+  const addUnique = (list) => {
+    list.forEach((p) => {
+      const key = (p.title || '').toLowerCase().trim();
+      if (key && !existingTitles.has(key)) {
+        allResults.push(p);
+        existingTitles.add(key);
+      }
+    });
+  };
+  addUnique(listenNotesResults);
+  addUnique(podchaserResults);
+  addUnique(appleResults);
 
   console.log(
     `Combined: ${listenNotesResults.length} ListenNotes + ` +
-    `${podchaserResults.length} Podchaser = ${allResults.length} unique`
+    `${podchaserResults.length} Podchaser + ${appleResults.length} Apple = ` +
+    `${allResults.length} unique`
   );
 
   return { podcasts: allResults };
@@ -1072,7 +1105,7 @@ Return pure JSON array only. No backticks. No markdown.
     const claudeResponse = await askClaudeWithTools(
       `Search English podcasts matching: "${text}".
        Prioritize Tiers 3 and 4. Cross-reference Apple Charts.
-       Return top 5 as pure JSON. No backticks. No markdown.`,
+       Return top 10 as pure JSON. No backticks. No markdown.`,
       systemPrompt
     );
 
