@@ -609,14 +609,14 @@ ${template}
 
 // ── SEND TO SLACK ────────────────────────────────────────
 async function sendToSlack(responseUrl, text) {
-  await axios.post(responseUrl, { response_type: 'in_channel', text });
+  await axios.post(responseUrl, { response_type: 'in_channel', text, unfurl_links: false, unfurl_media: false });
 }
 
 // ── POST BLOCKS TO SLACK CHANNEL ────────────────────────
 async function postToSlackChannel(channel, blocks, text) {
   const result = await axios.post(
     'https://slack.com/api/chat.postMessage',
-    { channel, blocks, text },
+    { channel, blocks, text, unfurl_links: false, unfurl_media: false },
     {
       headers: {
         Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}`,
