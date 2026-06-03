@@ -159,6 +159,23 @@ async function saveGeneralFeedback(feedbackText, submittedBy, category) {
   );
 }
 
+// ── SAVE / GET OUTREACH RECORD (Notion link) ─────────────
+async function saveOutreachRecord(podcastTitle, notionPageId, tier) {
+  await pool.query(
+    `INSERT INTO outreach_records (podcast_name, notion_page_id, tier, stage, date_approved)
+     VALUES ($1, $2, $3, 'Approved', NOW())`,
+    [podcastTitle, notionPageId, String(tier || '')]
+  );
+}
+
+async function getNotionPageId(podcastTitle) {
+  const result = await pool.query(
+    `SELECT notion_page_id FROM outreach_records
+     WHERE podcast_name = $1 ORDER BY created_at DESC LIMIT 1`,
+    [podcastTitle]
+  );
+  return result.rows[0] ? result.rows[0].notion_page_id : null;
+}
 // ── GET A SYSTEM PREFERENCE ──────────────────────────────
 async function getSystemPreference(key) {
   const result = await pool.query(
@@ -318,4 +335,6 @@ module.exports = {
   getStats,
   getSystemPreference,
   setSystemPreference,
+  saveOutreachRecord,
+  getNotionPageId,
 };

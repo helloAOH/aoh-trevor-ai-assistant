@@ -469,6 +469,43 @@ async function askClaude(userMessage) {
   return response.content[0].text;
 }
 
+// ── NOTION HELPERS ───────────────────────────────────────
+const NOTION_API = 'https://api.notion.com/v1';
+function notionHeaders() {
+  return {
+    Authorization: `Bearer ${process.env.NOTION_TOKEN}`,
+    'Notion-Version': '2022-06-28',
+    'Content-Type': 'application/json',
+  };
+}
+
+async function createNotionRow(podcast) {
+  if (!process.env.NOTION_TOKEN || !process.env.NOTION_DATABASE_ID) {
+    console.log('Notion not configured — skipping');
+    return null;
+  }
+  const templateLetter = TREVOR_CONTEXT.pitchTemplates.tierToTemplate[podcast.tier] || 'A';
+  const emailsFound = [podcast.contact_email].filter(Boolean).join(', ') || 'None yet — verify';
+
+  const properties = {
+    Podcast: { title: [{ text: { content: (podcast.title || 'Untitled').slice(0, 200) } }] },
+    Stage: { select: { name: 'Approved' } },
+    Tier: { rich_text: [{ text: { content: String(podcast.tier || '') } }] },
+    Template: { select: { name: templateLetter } },
+    'Emails Found': { rich_text: [{ text: { content: emailsFound.slice(0, 1900) } }] },
+    'Date Approved': { date: { start: new Date().toISOString().slice(0, 10) } },
+  };
+  if (podcast.website && podcast.website !== 'N/A') {
+    properties.Website = { url: podcast.website.slice(0, 200) };
+  }
+
+  const response = await axios.post(
+    `${NOTION_API}/pages`,
+    { parent: { database_id: process.env.NOTION_DATABASE_ID }, properties },
+    { headers: notionHeaders() }
+  );
+  return response.data.id;
+}
 // ── GENERATE PITCH EMAIL ─────────────────────────────────
 async function generatePitchEmail(
   podcastName, podcastDescription, podcastAudience,
@@ -1474,6 +1511,17 @@ app.post('/slack/actions', async (req, res) => {
       `Approved: ${podcastData.title}`
     );
 
+    // Create the Notion pipeline row (Stage: Approved)
+    let notionPageId = null;
+    try {
+      notionPageId = await createNotionRow(podcastData);
+      if (notionPageId) {
+        await db.saveOutreachRecord(podcastData.title, notionPageId, podcastData.tier);
+        console.log('Notion row created for', podcastData.title);
+      }
+    } catch (e) {
+      console.error('Notion create error:', e.response?.data?.message || e.message);
+    }
     // Generate pitch email
     try {
       const pitchData = await generatePitchEmail(
