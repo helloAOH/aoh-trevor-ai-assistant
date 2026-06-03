@@ -278,6 +278,30 @@ async function searchAppleITunes(keywords, maxResults = 10) {
   }
 }
 
+// ── FIND EMAILS VIA HUNTER.IO (free plan — on-demand only) ──
+async function hunterFindEmails(domain) {
+  const apiKey = process.env.HUNTER_API_KEY;
+  if (!apiKey || !domain) return { emails: [], error: 'No API key or domain' };
+  try {
+    const cleanDomain = domain
+      .replace(/^https?:\/\//, '')
+      .replace(/\/.*$/, '')
+      .replace(/^www\./, '');
+    const response = await axios.get('https://api.hunter.io/v2/domain-search', {
+      params: { domain: cleanDomain, api_key: apiKey, limit: 5 },
+      timeout: 10000,
+    });
+    const emails = (response.data?.data?.emails || []).map((e) => ({
+      email: e.value,
+      confidence: e.confidence,
+      type: e.type,
+    }));
+    return { emails, domain: cleanDomain };
+  } catch (err) {
+    console.error('Hunter error:', err.message);
+    return { emails: [], error: err.response?.data?.errors?.[0]?.details || err.message };
+  }
+}
 // ── SEARCH PODCASTS VIA PODCAST INDEX (free) ──────────────
 async function searchPodcastIndex(keywords, maxResults = 10) {
   try {
@@ -681,6 +705,33 @@ function buildPodcastBlock(podcast, index) {
     contact_email: podcast.contact_email || podcast.rss_email || null,
   });
 
+  const actionElements = [
+    {
+      type: 'button',
+      text: { type: 'plain_text', text: '✅ Approve', emoji: true },
+      style: 'primary',
+      action_id: 'approve_podcast',
+      value: podcastValue,
+    },
+    {
+      type: 'button',
+      text: { type: 'plain_text', text: '❌ Reject', emoji: true },
+      style: 'danger',
+      action_id: 'reject_podcast_start',
+      value: podcastValue,
+    },
+  ];
+
+  // No email found? Offer an on-demand Hunter lookup (protects the free quota)
+  if (foundEmails.length === 0 && podcast.website && podcast.website !== 'N/A') {
+    actionElements.push({
+      type: 'button',
+      text: { type: 'plain_text', text: '🔍 Try Hunter', emoji: true },
+      action_id: 'try_hunter',
+      value: JSON.stringify({ title: podcast.title, website: podcast.website }),
+    });
+  }
+
   return [
     { type: 'divider' },
     {
@@ -690,22 +741,7 @@ function buildPodcastBlock(podcast, index) {
     {
       type: 'actions',
       block_id: `podcast_action_${index}`,
-      elements: [
-        {
-          type: 'button',
-          text: { type: 'plain_text', text: '✅ Approve', emoji: true },
-          style: 'primary',
-          action_id: 'approve_podcast',
-          value: podcastValue,
-        },
-        {
-          type: 'button',
-          text: { type: 'plain_text', text: '❌ Reject', emoji: true },
-          style: 'danger',
-          action_id: 'reject_podcast_start',
-          value: podcastValue,
-        },
-      ],
+      elements: actionElements,
     },
   ];
 }
@@ -1664,6 +1700,32 @@ app.post('/slack/actions', async (req, res) => {
         'Regenerate failed'
       );
     }
+  }
+  // ── TRY HUNTER.IO EMAIL LOOKUP ─────────────────────────
+  if (actionId === 'try_hunter') {
+    const data = JSON.parse(action.value);
+
+    await postToSlackChannel(channelId,
+      [{ type: 'section', text: { type: 'mrkdwn',
+        text: `🔍 Searching Hunter.io for *${data.title}*...` }}],
+      'Hunter lookup'
+    );
+
+    const result = await hunterFindEmails(data.website);
+    let msg;
+    if (result.emails && result.emails.length > 0) {
+      const list = result.emails
+        .map((e) => `• ${e.email}  _(${e.confidence || '?'}% confidence, ${e.type || 'unknown'})_`)
+        .join('\n');
+      msg = `📧 *Hunter found for ${data.title}* (domain: ${result.domain}):\n${list}\n_Verify before using._`;
+    } else {
+      msg = `❌ Hunter found no emails for *${data.title}*${result.error ? ` (${result.error})` : ''}.`;
+    }
+
+    await postToSlackChannel(channelId,
+      [{ type: 'section', text: { type: 'mrkdwn', text: msg }}],
+      'Hunter result'
+    );
   }
 });
 
