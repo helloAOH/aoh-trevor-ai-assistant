@@ -506,6 +506,30 @@ async function createNotionRow(podcast) {
   );
   return response.data.id;
 }
+
+async function updateNotionStage(pageId, stage, extraProps = {}) {
+  if (!pageId || !process.env.NOTION_TOKEN) return;
+  await axios.patch(
+    `${NOTION_API}/pages/${pageId}`,
+    { properties: { Stage: { select: { name: stage } }, ...extraProps } },
+    { headers: notionHeaders() }
+  );
+}
+
+async function writeEmailToNotion(pageId, emailContent) {
+  if (!pageId || !process.env.NOTION_TOKEN || !emailContent) return;
+  const chunks = splitIntoBlocks(emailContent, 1900);
+  const children = chunks.slice(0, 90).map((chunk) => ({
+    object: 'block',
+    type: 'paragraph',
+    paragraph: { rich_text: [{ type: 'text', text: { content: chunk } }] },
+  }));
+  await axios.patch(
+    `${NOTION_API}/blocks/${pageId}/children`,
+    { children },
+    { headers: notionHeaders() }
+  );
+}
 // ── GENERATE PITCH EMAIL ─────────────────────────────────
 async function generatePitchEmail(
   podcastName, podcastDescription, podcastAudience,
@@ -1531,6 +1555,17 @@ app.post('/slack/actions', async (req, res) => {
       await db.savePitchEmail(podcastData.title, 1, pitchData.email_content);
       const emailBlocks = buildEmailBlock(podcastData.title, 1, pitchData, podcastData);
       await postToSlackChannel(channelId, emailBlocks, `Email 1 for ${podcastData.title}`);
+      // Write the email into the Notion page + Stage → Drafted
+      if (notionPageId) {
+        try {
+          await writeEmailToNotion(notionPageId, pitchData.email_content);
+          await updateNotionStage(notionPageId, 'Drafted', {
+            Tone: { rich_text: [{ text: { content: 'auto' } }] },
+          });
+        } catch (e) {
+          console.error('Notion email write error:', e.response?.data?.message || e.message);
+        }
+      }
     } catch (error) {
       console.error('Pitch error:', error.message);
       await postToSlackChannel(channelId,
