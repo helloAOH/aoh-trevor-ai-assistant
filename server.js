@@ -495,6 +495,7 @@ async function createNotionRow(podcast) {
     Stage: { select: { name: 'Approved' } },
     Tier: { rich_text: [{ text: { content: String(podcast.tier || '') } }] },
     Template: { select: { name: templateLetter } },
+    Host: { rich_text: [{ text: { content: (podcast.host || 'Unknown').slice(0, 200) } }] },
     'Emails Found': { rich_text: [{ text: { content: emailsFound.slice(0, 1900) } }] },
     'Date Approved': { date: { start: new Date().toISOString().slice(0, 10) } },
   };
@@ -766,7 +767,8 @@ function buildPodcastBlock(podcast, index) {
     listen_score: podcast.quality_score || 0,
     tier: podcast.tier || null,
     recommended_angle: podcast.recommended_angle || null,
-    contact_email: podcast.contact_email || podcast.rss_email || null,
+    contact_email: podcast.contact_email || podcast.rss_email || null, 
+    host: podcast.rss_author || podcast.publisher || null,
   });
 
   const actionElements = [
