@@ -277,14 +277,69 @@ async function searchAppleITunes(keywords, maxResults = 10) {
     return [];
   }
 }
+
+// ── SEARCH PODCASTS VIA PODCAST INDEX (free) ──────────────
+async function searchPodcastIndex(keywords, maxResults = 10) {
+  try {
+    const apiKey = process.env.PODCASTINDEX_API_KEY;
+    const apiSecret = process.env.PODCASTINDEX_API_SECRET;
+    if (!apiKey || !apiSecret) {
+      console.log('Podcast Index keys missing — skipping');
+      return [];
+    }
+    console.log(`Podcast Index searching for: ${keywords}`);
+
+    const apiHeaderTime = Math.floor(Date.now() / 1000);
+    const hash = crypto
+      .createHash('sha1')
+      .update(apiKey + apiSecret + apiHeaderTime)
+      .digest('hex');
+
+    const response = await axios.get(
+      'https://api.podcastindex.org/api/1.0/search/byterm',
+      {
+        params: { q: keywords, max: maxResults },
+        headers: {
+          'X-Auth-Key': apiKey,
+          'X-Auth-Date': apiHeaderTime,
+          Authorization: hash,
+          'User-Agent': 'TrevorAIAssistant/1.0',
+        },
+        timeout: 10000,
+      }
+    );
+
+    const feeds = response.data?.feeds || [];
+    const results = feeds
+      .filter((p) => !p.language || p.language.toLowerCase().startsWith('en'))
+      .map((p) => ({
+        title: p.title || '',
+        description: (p.description || '').slice(0, 500),
+        website: p.link || p.url || 'N/A',
+        total_episodes: p.episodeCount || 0,
+        publisher: p.author || '',
+        language: 'English',
+        source: 'PodcastIndex',
+        contact_email: null,
+        feedUrl: p.url || null,
+      }));
+    console.log(`Podcast Index returned ${results.length} results`);
+    return results.filter((r) => r.title);
+  } catch (err) {
+    console.error('Podcast Index error:', err.message);
+    return [];
+  }
+}
 async function search_podcasts({ keywords, max_results = 10 }) {
   console.log(`Combined search for: ${keywords}`);
 
-  const [listenNotesResults, podchaserResults, appleResults] = await Promise.all([
-    searchListenNotes(keywords, max_results),
-    searchPodchaser(keywords, max_results),
-    searchAppleITunes(keywords, max_results),
-  ]);
+  const [listenNotesResults, podchaserResults, appleResults, podcastIndexResults] =
+    await Promise.all([
+      searchListenNotes(keywords, max_results),
+      searchPodchaser(keywords, max_results),
+      searchAppleITunes(keywords, max_results),
+      searchPodcastIndex(keywords, max_results),
+    ]);
 
   const allResults = [];
   const existingTitles = new Set();
@@ -300,11 +355,12 @@ async function search_podcasts({ keywords, max_results = 10 }) {
   addUnique(listenNotesResults);
   addUnique(podchaserResults);
   addUnique(appleResults);
+  addUnique(podcastIndexResults);
 
   console.log(
     `Combined: ${listenNotesResults.length} ListenNotes + ` +
-    `${podchaserResults.length} Podchaser + ${appleResults.length} Apple = ` +
-    `${allResults.length} unique`
+    `${podchaserResults.length} Podchaser + ${appleResults.length} Apple + ` +
+    `${podcastIndexResults.length} PodcastIndex = ${allResults.length} unique`
   );
 
   return { podcasts: allResults };
