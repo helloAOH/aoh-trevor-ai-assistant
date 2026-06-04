@@ -93,16 +93,16 @@ function formatAppleChartsForClaude(charts) {
   return text;
 }
 
-// ── APPLE LINK + RSS EMAIL + DESCRIPTION + EPISODES (free) ──
+// ── APPLE LINK + RSS EMAIL/HOST/WEBSITE/DATES/EPISODES ────
 async function fetchAppleInfo(title) {
   const fallback = {
     appleUrl: `https://podcasts.apple.com/us/search?term=${encodeURIComponent(title)}`,
     feedUrl: null, rssEmail: null, rssAuthor: null, rssDescription: null, rssEpisodes: null,
+    ownerName: null, personHosts: null, channelLink: null, rssFirstDate: null, rssLastDate: null,
   };
   try {
     const response = await axios.get('https://itunes.apple.com/search', {
-      params: { term: title, entity: 'podcast', limit: 1 },
-      timeout: 8000,
+      params: { term: title, entity: 'podcast', limit: 1 }, timeout: 8000,
     });
     const result = response.data?.results?.[0];
     if (!result) return fallback;
@@ -110,50 +110,62 @@ async function fetchAppleInfo(title) {
     const info = {
       appleUrl: result.collectionViewUrl || fallback.appleUrl,
       feedUrl: result.feedUrl || null,
-      rssEmail: null,
-      rssAuthor: result.artistName || null,
-      rssDescription: null,
-      rssEpisodes: null,
+      rssEmail: null, rssAuthor: result.artistName || null, rssDescription: null, rssEpisodes: null,
+      ownerName: null, personHosts: null, channelLink: null, rssFirstDate: null, rssLastDate: null,
     };
 
     if (result.feedUrl) {
       try {
         const feed = await axios.get(result.feedUrl, {
-          timeout: 8000,
-          headers: { 'User-Agent': 'Mozilla/5.0 (compatible; PodcastBot/1.0)' },
+          timeout: 8000, headers: { 'User-Agent': 'Mozilla/5.0 (compatible; PodcastBot/1.0)' },
         });
         const xml = typeof feed.data === 'string' ? feed.data : '';
-        const emailMatch = xml.match(/<itunes:email>\s*([^<\s]+@[^<\s]+)\s*<\/itunes:email>/i);
-        if (emailMatch) info.rssEmail = emailMatch[1].trim();
-        const authorMatch = xml.match(/<itunes:author>\s*([^<]+?)\s*<\/itunes:author>/i);
-        if (authorMatch) info.rssAuthor = authorMatch[1].trim();
-
         const parts = xml.split(/<item[\s>]/i);
         const channelXml = parts[0];
+
+        const emailMatch = xml.match(/<itunes:email>\s*([^<\s]+@[^<\s]+)\s*<\/itunes:email>/i);
+        if (emailMatch) info.rssEmail = emailMatch[1].trim();
+        const authorMatch = channelXml.match(/<itunes:author>\s*([^<]+?)\s*<\/itunes:author>/i);
+        if (authorMatch) info.rssAuthor = authorMatch[1].trim();
+
+        const ownerNameMatch = channelXml.match(/<itunes:owner>[\s\S]*?<itunes:name>\s*([^<]+?)\s*<\/itunes:name>/i);
+        if (ownerNameMatch) info.ownerName = ownerNameMatch[1].trim();
+
+        const persons = [...channelXml.matchAll(/<podcast:person([^>]*)>\s*([^<]+?)\s*<\/podcast:person>/gi)];
+        const hosts = persons
+          .filter((p) => !/role\s*=/i.test(p[1]) || /role\s*=\s*["']?host/i.test(p[1]))
+          .map((p) => p[2].trim()).filter(Boolean);
+        if (hosts.length) info.personHosts = [...new Set(hosts)].slice(0, 3).join(' & ');
+
+        const linkMatch = channelXml.match(/<link>\s*(https?:\/\/[^<\s]+?)\s*<\/link>/i);
+        if (linkMatch) info.channelLink = linkMatch[1].trim();
+
         const descMatch =
           channelXml.match(/<description>\s*<!\[CDATA\[([\s\S]*?)\]\]>/i) ||
           channelXml.match(/<itunes:summary>\s*<!\[CDATA\[([\s\S]*?)\]\]>/i) ||
           channelXml.match(/<description>([\s\S]*?)<\/description>/i) ||
           channelXml.match(/<itunes:summary>([\s\S]*?)<\/itunes:summary>/i);
         if (descMatch) {
-          info.rssDescription = descMatch[1]
-            .replace(/<[^>]+>/g, ' ').replace(/&[a-z]+;/gi, ' ')
-            .replace(/\s+/g, ' ').trim().slice(0, 1500);
+          info.rssDescription = descMatch[1].replace(/<[^>]+>/g, ' ').replace(/&[a-z]+;/gi, ' ').replace(/\s+/g, ' ').trim().slice(0, 1500);
         }
 
-        // First few episodes' titles + show notes (often name the host + site)
         let epText = '';
         parts.slice(1, 4).forEach((item) => {
-          const t = item.match(/<title>\s*<!\[CDATA\[([\s\S]*?)\]\]>/i) ||
-                    item.match(/<title>([\s\S]*?)<\/title>/i);
-          const d = item.match(/<description>\s*<!\[CDATA\[([\s\S]*?)\]\]>/i) ||
-                    item.match(/<description>([\s\S]*?)<\/description>/i) ||
-                    item.match(/<itunes:summary>\s*<!\[CDATA\[([\s\S]*?)\]\]>/i) ||
-                    item.match(/<itunes:summary>([\s\S]*?)<\/itunes:summary>/i);
+          const t = item.match(/<title>\s*<!\[CDATA\[([\s\S]*?)\]\]>/i) || item.match(/<title>([\s\S]*?)<\/title>/i);
+          const d = item.match(/<description>\s*<!\[CDATA\[([\s\S]*?)\]\]>/i) || item.match(/<description>([\s\S]*?)<\/description>/i)
+            || item.match(/<itunes:summary>\s*<!\[CDATA\[([\s\S]*?)\]\]>/i) || item.match(/<itunes:summary>([\s\S]*?)<\/itunes:summary>/i);
           if (t) epText += ' ' + t[1];
           if (d) epText += ' ' + d[1].replace(/<[^>]+>/g, ' ');
         });
         info.rssEpisodes = epText.replace(/&[a-z]+;/gi, ' ').replace(/\s+/g, ' ').trim().slice(0, 1500);
+
+        const pubDates = [...xml.matchAll(/<pubDate>\s*([^<]+?)\s*<\/pubDate>/gi)]
+          .map((m) => new Date(m[1])).filter((d) => !isNaN(d.getTime()));
+        if (pubDates.length) {
+          pubDates.sort((a, b) => a - b);
+          info.rssFirstDate = pubDates[0];
+          info.rssLastDate = pubDates[pubDates.length - 1];
+        }
       } catch (e) {
         console.error('RSS fetch error:', e.message);
       }
@@ -218,7 +230,7 @@ ${items}`;
     JSON.parse(match[0]).forEach((e) => {
       const p = podcasts[e.i];
       if (!p) return;
-      if (e.host && e.host !== 'Unknown') p.host = e.host;
+      if (!p.host && e.host && e.host !== 'Unknown') p.host = e.host;
       if (e.website) p.extracted_website = e.website;
     });
   } catch (err) {
@@ -842,7 +854,7 @@ function buildPodcastBlock(podcast, index) {
     ``,
     `${scoreEmoji} *Score:* ${score}/10 | 🏷️ *Tier ${podcast.tier}:* ${tierName} | 📡 *Source:* ${podcast.source || 'ListenNotes'}`,
     `🌐 *Website:* ${(podcast.website || 'N/A').slice(0, 100)}`,
-    `👤 *Host:* ${podcast.host || podcast.rss_author || podcast.publisher || 'Unknown'}`,
+    `👤 *Host:* ${podcast.host || podcast.rss_owner_name || podcast.rss_author || podcast.publisher || 'Unknown'}`,
    `🎙️ *Episodes:* ${podcast.total_episodes || 'Unknown'}`,
     `📅 *Running:* ${podcast.first_episode_date || 'Unknown'} → ${podcast.latest_episode_date || 'Unknown'}${podcast.years_running && podcast.years_running !== 'Unknown' ? ` (~${podcast.years_running} yrs)` : ''}`,
     `📈 *Reach:* ${podcast.apple_chart_rank ? `🍎 In Apple Top 100 (#${podcast.apple_chart_rank})` : 'Not in Apple Top 100'}${podcast.apple_url ? ` — <${podcast.apple_url}|Verify on Apple>` : ''}`,
@@ -866,7 +878,7 @@ function buildPodcastBlock(podcast, index) {
     tier: podcast.tier || null,
     recommended_angle: podcast.recommended_angle || null,
     contact_email: podcast.contact_email || podcast.rss_email || null, 
-    host: podcast.host || podcast.rss_author || podcast.publisher || null,
+    host: podcast.host || podcast.rss_owner_name || podcast.rss_author || podcast.publisher || null,
   });
 
   const actionElements = [
@@ -1404,7 +1416,16 @@ Return pure JSON array only. No backticks. No markdown.
       p.rss_email = info.rssEmail;
       p.rss_author = info.rssAuthor;
       p.full_description = [info.rssDescription, info.rssEpisodes].filter(Boolean).join(' \n ').slice(0, 2800) || p.description;
-      
+      p.rss_owner_name = info.ownerName;
+      p.rss_channel_link = info.channelLink;
+      if (info.personHosts) p.host = info.personHosts; // structured host wins
+      if (info.rssFirstDate && info.rssLastDate) {
+        const fmt = (d) => d.toLocaleString('en-US', { month: 'short', year: 'numeric' });
+        p.first_episode_date = fmt(info.rssFirstDate);
+        p.latest_episode_date = fmt(info.rssLastDate);
+        p.years_running = String(Math.max(0, Math.round((info.rssLastDate - info.rssFirstDate) / 31557600000)));
+      }
+
       console.log(`RSS email for ${p.title}: ${info.rssEmail || 'none'}`);
     }));
     // Real Apple Top 100 rank (code-computed — overrides any Claude guess)
@@ -1419,9 +1440,11 @@ Return pure JSON array only. No backticks. No markdown.
       const cleaned = cleanWebsite(p.website);
       const extracted = (p.extracted_website || '').trim();
       const emailDomain = domainFromEmail(p.contact_email) || domainFromEmail(p.rss_email);
+      const channelLink = p.rss_channel_link && !isHostingUrl(p.rss_channel_link) ? cleanWebsite(p.rss_channel_link) : null;
 
       let site = null;
-      if (extracted && extracted.includes('.')) site = extracted;   // 1) named in description
+      if (channelLink) site = channelLink;
+      else if (extracted && extracted.includes('.')) site = extracted; // 1) named in description
       else if (emailDomain) site = emailDomain;                     // 2) domain from a custom-domain email
       else if (cleaned && !isHostingUrl(cleaned)) site = cleaned;   // 3) listed site (not hosting)
       else site = cleaned;                                          // 4) fallback
