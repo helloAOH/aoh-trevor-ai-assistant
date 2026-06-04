@@ -93,11 +93,11 @@ function formatAppleChartsForClaude(charts) {
   return text;
 }
 
-// ── GET APPLE LINK + RSS OWNER EMAIL (free) ──────────────
+// ── GET APPLE LINK + RSS OWNER EMAIL + DESCRIPTION (free) ──
 async function fetchAppleInfo(title) {
   const fallback = {
     appleUrl: `https://podcasts.apple.com/us/search?term=${encodeURIComponent(title)}`,
-    feedUrl: null, rssEmail: null, rssAuthor: null,
+    feedUrl: null, rssEmail: null, rssAuthor: null, rssDescription: null,
   };
   try {
     const response = await axios.get('https://itunes.apple.com/search', {
@@ -112,9 +112,9 @@ async function fetchAppleInfo(title) {
       feedUrl: result.feedUrl || null,
       rssEmail: null,
       rssAuthor: result.artistName || null,
+      rssDescription: null,
     };
 
-    // Read the owner email straight from the RSS feed (often the real booking email)
     if (result.feedUrl) {
       try {
         const feed = await axios.get(result.feedUrl, {
@@ -126,6 +126,22 @@ async function fetchAppleInfo(title) {
         if (emailMatch) info.rssEmail = emailMatch[1].trim();
         const authorMatch = xml.match(/<itunes:author>\s*([^<]+?)\s*<\/itunes:author>/i);
         if (authorMatch) info.rssAuthor = authorMatch[1].trim();
+
+        // Channel description (the part BEFORE the first <item>) = richest real text
+        const channelXml = xml.split(/<item[\s>]/i)[0];
+        const descMatch =
+          channelXml.match(/<description>\s*<!\[CDATA\[([\s\S]*?)\]\]>/i) ||
+          channelXml.match(/<itunes:summary>\s*<!\[CDATA\[([\s\S]*?)\]\]>/i) ||
+          channelXml.match(/<description>([\s\S]*?)<\/description>/i) ||
+          channelXml.match(/<itunes:summary>([\s\S]*?)<\/itunes:summary>/i);
+        if (descMatch) {
+          info.rssDescription = descMatch[1]
+            .replace(/<[^>]+>/g, ' ')
+            .replace(/&[a-z]+;/gi, ' ')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .slice(0, 1500);
+        }
       } catch (e) {
         console.error('RSS fetch error:', e.message);
       }
@@ -137,6 +153,55 @@ async function fetchAppleInfo(title) {
   return fallback;
 }
 
+// ── CLEAN / CHOOSE A REAL WEBSITE ─────────────────────────
+function cleanWebsite(url) {
+  if (!url || url === 'N/A') return null;
+  return url.split('?')[0].replace(/\/$/, '');
+}
+function isHostingUrl(url) {
+  return /podcasts\.apple\.com|anchor\.fm|buzzsprout\.com|redcircle\.com|podbean\.com|open\.spotify\.com|libsyn|simplecast|captivate\.fm|transistor\.fm|podchaser\.com|listennotes\.com|megaphone/i.test(url || '');
+}
+
+// ── EXTRACT HOST + WEBSITE FROM REAL TEXT (never guessed) ──
+async function extractHostsAndSites(podcasts) {
+  if (!podcasts.length) return;
+  try {
+    const client = new Anthropic.Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const items = podcasts
+      .map((p, i) =>
+        `${i}. TITLE: ${p.title}\nDESCRIPTION: ${(p.full_description || p.description || '').slice(0, 1200)}`
+      )
+      .join('\n\n');
+
+    const prompt = `You extract facts ONLY from the text given. NEVER guess.
+For each podcast return:
+- "host": the host name(s) clearly stated in the TITLE or DESCRIPTION. Examples: title "X with Jane Doe" -> "Jane Doe"; "I'm Jessica Knight..." -> "Jessica Knight"; "Alison Seponara and Taylor Marae are..." -> "Alison Seponara & Taylor Marae". If not clearly stated, use "Unknown".
+- "website": a real website URL the host mentions in the DESCRIPTION (their own site, e.g. "www.emotionalabusecoach.com"). If none, use "".
+
+Return ONLY a JSON array, same order, no markdown:
+[{"i":0,"host":"...","website":"..."}]
+
+PODCASTS:
+${items}`;
+
+    const response = await client.messages.create({
+      model: 'claude-opus-4-5',
+      max_tokens: 2000,
+      messages: [{ role: 'user', content: prompt }],
+    });
+    const text = response.content[0].text.replace(/```json/g, '').replace(/```/g, '').trim();
+    const match = text.match(/\[[\s\S]*\]/);
+    if (!match) return;
+    JSON.parse(match[0]).forEach((e) => {
+      const p = podcasts[e.i];
+      if (!p) return;
+      if (e.host && e.host !== 'Unknown') p.host = e.host;
+      if (e.website) p.extracted_website = e.website;
+    });
+  } catch (err) {
+    console.error('Host/site extraction error:', err.message);
+  }
+}
 // ── SEARCH PODCASTS VIA LISTENNOTES ──────────────────────
 async function searchListenNotes(keywords, maxResults = 10) {
   try {
@@ -754,7 +819,7 @@ function buildPodcastBlock(podcast, index) {
     ``,
     `${scoreEmoji} *Score:* ${score}/10 | 🏷️ *Tier ${podcast.tier}:* ${tierName} | 📡 *Source:* ${podcast.source || 'ListenNotes'}`,
     `🌐 *Website:* ${(podcast.website || 'N/A').slice(0, 100)}`,
-    `👤 *Host:* ${podcast.rss_author || podcast.publisher || 'Unknown'}`,
+    `👤 *Host:* ${podcast.host || podcast.rss_author || podcast.publisher || 'Unknown'}`,
    `🎙️ *Episodes:* ${podcast.total_episodes || 'Unknown'}`,
     `📅 *Running:* ${podcast.first_episode_date || 'Unknown'} → ${podcast.latest_episode_date || 'Unknown'}${podcast.years_running && podcast.years_running !== 'Unknown' ? ` (~${podcast.years_running} yrs)` : ''}`,
     `📈 *Reach:* ${podcast.apple_chart_rank ? `🍎 In Apple Top 100 (#${podcast.apple_chart_rank})` : 'Not in Apple Top 100'}${podcast.apple_url ? ` — <${podcast.apple_url}|Verify on Apple>` : ''}`,
@@ -778,7 +843,7 @@ function buildPodcastBlock(podcast, index) {
     tier: podcast.tier || null,
     recommended_angle: podcast.recommended_angle || null,
     contact_email: podcast.contact_email || podcast.rss_email || null, 
-    host: podcast.rss_author || podcast.publisher || null,
+    host: podcast.host || podcast.rss_author || podcast.publisher || null,
   });
 
   const actionElements = [
@@ -1315,6 +1380,7 @@ Return pure JSON array only. No backticks. No markdown.
       p.apple_url = info.appleUrl;
       p.rss_email = info.rssEmail;
       p.rss_author = info.rssAuthor;
+      p.full_description = info.rssDescription || p.description;
       
       console.log(`RSS email for ${p.title}: ${info.rssEmail || 'none'}`);
     }));
@@ -1322,6 +1388,21 @@ Return pure JSON array only. No backticks. No markdown.
     podcasts.forEach((p) => {
       p.apple_chart_rank = matchAppleTop100(p.title, appleCharts.top);
       console.log(`Apple Top 100 check: ${p.title} -> ${p.apple_chart_rank || 'not charting'}`);
+    });
+
+    // Extract real host names + websites from the descriptions
+    await extractHostsAndSites(podcasts);
+    podcasts.forEach((p) => {
+      const cleaned = cleanWebsite(p.website);
+      const extracted = (p.extracted_website || '').trim();
+      if (extracted && extracted.includes('.')) {
+        p.website = extracted.startsWith('http') ? extracted : 'https://' + extracted;
+      } else if (cleaned && !isHostingUrl(cleaned)) {
+        p.website = cleaned;
+      } else {
+        p.website = cleaned || 'N/A';
+      }
+      console.log(`Host for ${p.title}: ${p.host || 'Unknown'} | Site: ${p.website}`);
     });
 
     const appleCount = podcasts.filter((p) => p.apple_chart_rank).length;
