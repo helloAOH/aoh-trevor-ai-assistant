@@ -468,10 +468,11 @@ async function searchPodcastIndex(keywords, maxResults = 10) {
         website: p.link || p.url || 'N/A',
         total_episodes: p.episodeCount || 0,
         publisher: p.author || '',
-        language: 'English',
+        language: p.language || 'English',
         source: 'PodcastIndex',
         contact_email: null,
         feedUrl: p.url || null,
+        last_episode_ms: p.lastUpdateTime ? p.lastUpdateTime * 1000 : null,
       }));
     console.log(`Podcast Index returned ${results.length} results`);
     return results.filter((r) => r.title);
@@ -884,6 +885,7 @@ function buildPodcastBlock(podcast, index) {
     `🎤 *Format:* ${podcast.format || 'unknown'}${podcast.format === 'solo' ? ' ⚠️ may not take guests' : ''}`,
     `📆 *Last episode:* ${podcast.last_episode_ms ? (() => { const m = Math.round((Date.now() - podcast.last_episode_ms) / (30.44 * 24 * 3600 * 1000)); return m <= 1 ? 'within a month' : `${m} months ago${m > 6 ? ' ⚠️' : ''}`; })() : 'Unknown'}`,
     `📈 *Reach:* ${podcast.apple_chart_rank ? `🍎 In Apple Top 100 (#${podcast.apple_chart_rank})` : 'Not in Apple Top 100'}${podcast.apple_url ? ` — <${podcast.apple_url}|Verify on Apple>` : ''}`,
+    podcast.rss_categories && podcast.rss_categories.length ? `🏷️ *Categories:* ${podcast.rss_categories.join(', ')}` : null,
     `📧 *Emails found:*\n${emailsDisplay}`,
     `🔎 *Verify / find more:* ${verifyLinks}`,
     ``,
@@ -892,7 +894,7 @@ function buildPodcastBlock(podcast, index) {
     `💡 *Why Trevor fits:* ${(podcast.summary || podcast.description || '').slice(0, 250)}`,
     ``,
     `📊 *Score breakdown:* ${(podcast.score_breakdown || 'N/A').slice(0, 150)}`,
-  ].join('\n');
+  ].filter(Boolean).join('\n');
 
   // Encode podcast data for button values
   const podcastValue = JSON.stringify({
@@ -1473,12 +1475,14 @@ Return pure JSON array only. No backticks. No markdown.
       const extracted = (p.extracted_website || '').trim();
       const emailDomain = domainFromEmail(p.contact_email) || domainFromEmail(p.rss_email);
       const channelLink = p.rss_channel_link && !isHostingUrl(p.rss_channel_link) ? cleanWebsite(p.rss_channel_link) : null;
+      const funding = p.rss_funding && !isHostingUrl(p.rss_funding) && !/patreon|ko-?fi|buymeacoffee|paypal|venmo|gofundme/i.test(p.rss_funding) ? cleanWebsite(p.rss_funding) : null;
 
       let site = null;
       if (channelLink) site = channelLink;
       else if (extracted && extracted.includes('.')) site = extracted; // 1) named in description
       else if (emailDomain) site = emailDomain;                     // 2) domain from a custom-domain email
-      else if (cleaned && !isHostingUrl(cleaned)) site = cleaned;   // 3) listed site (not hosting)
+      else if (cleaned && !isHostingUrl(cleaned)) site = cleaned;
+      else if (funding) site = funding;   // 3) listed site (not hosting)
       else site = cleaned;                                          // 4) fallback
 
       if (site && !/^https?:\/\//.test(site)) site = 'https://' + site;
