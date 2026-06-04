@@ -485,6 +485,15 @@ async function createNotionRow(podcast) {
     return null;
   }
   const templateLetter = TREVOR_CONTEXT.pitchTemplates.tierToTemplate[podcast.tier] || 'A';
+  const tierLabels = {
+    1: 'Tier 1 - Relationships & Dating',
+    2: 'Tier 2 - Personal Development & Mindset',
+    3: 'Tier 3 - High Achievers Struggling in Relationships',
+    4: 'Tier 4 - Entrepreneurship + Self-Dev + Holistic Life',
+    5: 'Tier 5 - Christian Women & Faith',
+    6: "Tier 6 - Women's Lifestyle & Wellness",
+  };
+  const tierLabel = tierLabels[podcast.tier] || `Tier ${podcast.tier || '?'}`;
   let hunterEmail = null;
   try { hunterEmail = await db.getHunterEmail(podcast.title); } catch (e) {}
   const emailList = [podcast.contact_email, hunterEmail].filter(Boolean);
@@ -493,7 +502,7 @@ async function createNotionRow(podcast) {
   const properties = {
     Podcast: { title: [{ text: { content: (podcast.title || 'Untitled').slice(0, 200) } }] },
     Stage: { select: { name: 'Approved' } },
-    Tier: { rich_text: [{ text: { content: String(podcast.tier || '') } }] },
+    Tier: { select: { name: tierLabel } },
     Template: { select: { name: templateLetter } },
     Host: { rich_text: [{ text: { content: (podcast.host || 'Unknown').slice(0, 200) } }] },
     'Emails Found': { rich_text: [{ text: { content: emailsFound.slice(0, 1900) } }] },
@@ -745,6 +754,7 @@ function buildPodcastBlock(podcast, index) {
     ``,
     `${scoreEmoji} *Score:* ${score}/10 | 🏷️ *Tier ${podcast.tier}:* ${tierName} | 📡 *Source:* ${podcast.source || 'ListenNotes'}`,
     `🌐 *Website:* ${(podcast.website || 'N/A').slice(0, 100)}`,
+    `👤 *Host:* ${podcast.rss_author || podcast.publisher || 'Unknown'}`,
    `🎙️ *Episodes:* ${podcast.total_episodes || 'Unknown'}`,
     `📅 *Running:* ${podcast.first_episode_date || 'Unknown'} → ${podcast.latest_episode_date || 'Unknown'}${podcast.years_running && podcast.years_running !== 'Unknown' ? ` (~${podcast.years_running} yrs)` : ''}`,
     `📈 *Reach:* ${podcast.apple_chart_rank ? `🍎 In Apple Top 100 (#${podcast.apple_chart_rank})` : 'Not in Apple Top 100'}${podcast.apple_url ? ` — <${podcast.apple_url}|Verify on Apple>` : ''}`,
