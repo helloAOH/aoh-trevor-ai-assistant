@@ -161,6 +161,17 @@ function cleanWebsite(url) {
 function isHostingUrl(url) {
   return /podcasts\.apple\.com|anchor\.fm|buzzsprout\.com|redcircle\.com|podbean\.com|open\.spotify\.com|libsyn|simplecast|captivate\.fm|transistor\.fm|podchaser\.com|listennotes\.com|megaphone/i.test(url || '');
 }
+function domainFromEmail(email) {
+  if (!email || !email.includes('@')) return null;
+  let domain = email.split('@')[1].toLowerCase().trim().replace(/[>,;\s].*$/, '');
+  const generic = [
+    'gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'icloud.com',
+    'aol.com', 'proton.me', 'protonmail.com', 'me.com', 'live.com',
+    'msn.com', 'gmx.com', 'ymail.com',
+  ];
+  if (!domain || generic.includes(domain) || isHostingUrl(domain)) return null;
+  return domain;
+}
 
 // ── EXTRACT HOST + WEBSITE FROM REAL TEXT (never guessed) ──
 async function extractHostsAndSites(podcasts) {
@@ -1395,13 +1406,16 @@ Return pure JSON array only. No backticks. No markdown.
     podcasts.forEach((p) => {
       const cleaned = cleanWebsite(p.website);
       const extracted = (p.extracted_website || '').trim();
-      if (extracted && extracted.includes('.')) {
-        p.website = extracted.startsWith('http') ? extracted : 'https://' + extracted;
-      } else if (cleaned && !isHostingUrl(cleaned)) {
-        p.website = cleaned;
-      } else {
-        p.website = cleaned || 'N/A';
-      }
+      const emailDomain = domainFromEmail(p.contact_email) || domainFromEmail(p.rss_email);
+
+      let site = null;
+      if (extracted && extracted.includes('.')) site = extracted;   // 1) named in description
+      else if (emailDomain) site = emailDomain;                     // 2) domain from a custom-domain email
+      else if (cleaned && !isHostingUrl(cleaned)) site = cleaned;   // 3) listed site (not hosting)
+      else site = cleaned;                                          // 4) fallback
+
+      if (site && !/^https?:\/\//.test(site)) site = 'https://' + site;
+      p.website = site || 'N/A';
       console.log(`Host for ${p.title}: ${p.host || 'Unknown'} | Site: ${p.website}`);
     });
 
