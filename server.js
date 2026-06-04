@@ -93,11 +93,11 @@ function formatAppleChartsForClaude(charts) {
   return text;
 }
 
-// ── GET APPLE LINK + RSS OWNER EMAIL + DESCRIPTION (free) ──
+// ── APPLE LINK + RSS EMAIL + DESCRIPTION + EPISODES (free) ──
 async function fetchAppleInfo(title) {
   const fallback = {
     appleUrl: `https://podcasts.apple.com/us/search?term=${encodeURIComponent(title)}`,
-    feedUrl: null, rssEmail: null, rssAuthor: null, rssDescription: null,
+    feedUrl: null, rssEmail: null, rssAuthor: null, rssDescription: null, rssEpisodes: null,
   };
   try {
     const response = await axios.get('https://itunes.apple.com/search', {
@@ -113,6 +113,7 @@ async function fetchAppleInfo(title) {
       rssEmail: null,
       rssAuthor: result.artistName || null,
       rssDescription: null,
+      rssEpisodes: null,
     };
 
     if (result.feedUrl) {
@@ -127,8 +128,8 @@ async function fetchAppleInfo(title) {
         const authorMatch = xml.match(/<itunes:author>\s*([^<]+?)\s*<\/itunes:author>/i);
         if (authorMatch) info.rssAuthor = authorMatch[1].trim();
 
-        // Channel description (the part BEFORE the first <item>) = richest real text
-        const channelXml = xml.split(/<item[\s>]/i)[0];
+        const parts = xml.split(/<item[\s>]/i);
+        const channelXml = parts[0];
         const descMatch =
           channelXml.match(/<description>\s*<!\[CDATA\[([\s\S]*?)\]\]>/i) ||
           channelXml.match(/<itunes:summary>\s*<!\[CDATA\[([\s\S]*?)\]\]>/i) ||
@@ -136,12 +137,23 @@ async function fetchAppleInfo(title) {
           channelXml.match(/<itunes:summary>([\s\S]*?)<\/itunes:summary>/i);
         if (descMatch) {
           info.rssDescription = descMatch[1]
-            .replace(/<[^>]+>/g, ' ')
-            .replace(/&[a-z]+;/gi, ' ')
-            .replace(/\s+/g, ' ')
-            .trim()
-            .slice(0, 1500);
+            .replace(/<[^>]+>/g, ' ').replace(/&[a-z]+;/gi, ' ')
+            .replace(/\s+/g, ' ').trim().slice(0, 1500);
         }
+
+        // First few episodes' titles + show notes (often name the host + site)
+        let epText = '';
+        parts.slice(1, 4).forEach((item) => {
+          const t = item.match(/<title>\s*<!\[CDATA\[([\s\S]*?)\]\]>/i) ||
+                    item.match(/<title>([\s\S]*?)<\/title>/i);
+          const d = item.match(/<description>\s*<!\[CDATA\[([\s\S]*?)\]\]>/i) ||
+                    item.match(/<description>([\s\S]*?)<\/description>/i) ||
+                    item.match(/<itunes:summary>\s*<!\[CDATA\[([\s\S]*?)\]\]>/i) ||
+                    item.match(/<itunes:summary>([\s\S]*?)<\/itunes:summary>/i);
+          if (t) epText += ' ' + t[1];
+          if (d) epText += ' ' + d[1].replace(/<[^>]+>/g, ' ');
+        });
+        info.rssEpisodes = epText.replace(/&[a-z]+;/gi, ' ').replace(/\s+/g, ' ').trim().slice(0, 1500);
       } catch (e) {
         console.error('RSS fetch error:', e.message);
       }
@@ -180,7 +192,7 @@ async function extractHostsAndSites(podcasts) {
     const client = new Anthropic.Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     const items = podcasts
       .map((p, i) =>
-        `${i}. TITLE: ${p.title}\nDESCRIPTION: ${(p.full_description || p.description || '').slice(0, 1200)}`
+        `${i}. TITLE: ${p.title}\nDESCRIPTION: ${(p.full_description || p.description || '').slice(0, 2000)}`
       )
       .join('\n\n');
 
@@ -1391,7 +1403,7 @@ Return pure JSON array only. No backticks. No markdown.
       p.apple_url = info.appleUrl;
       p.rss_email = info.rssEmail;
       p.rss_author = info.rssAuthor;
-      p.full_description = info.rssDescription || p.description;
+      p.full_description = [info.rssDescription, info.rssEpisodes].filter(Boolean).join(' \n ').slice(0, 2800) || p.description;
       
       console.log(`RSS email for ${p.title}: ${info.rssEmail || 'none'}`);
     }));
