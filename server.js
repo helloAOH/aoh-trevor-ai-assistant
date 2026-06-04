@@ -236,10 +236,10 @@ async function extractHostsAndSites(podcasts) {
 For each podcast return:
 - "host": the host name(s) clearly stated in the TITLE or DESCRIPTION. Examples: title "X with Jane Doe" -> "Jane Doe"; "I'm Jessica Knight..." -> "Jessica Knight"; "Alison Seponara and Taylor Marae are..." -> "Alison Seponara & Taylor Marae". If not clearly stated, use "Unknown".
 - "website": a real website URL the host mentions in the DESCRIPTION (their own site, e.g. "www.emotionalabusecoach.com"). If none, use "".
-- "format": "interview" if the show regularly interviews guests, "solo" if one host alone, "mixed", or "unknown".`;
+- "format": "interview" if the show regularly interviews guests, "solo" if one host alone, "mixed", or "unknown".
 
 Return ONLY a JSON array, same order, no markdown:
-[{"i":0,"host":"...","website":"..."}]
+[{"i":0,"host":"...","website":"...","format":"..."}]
 
 PODCASTS:
 ${items}`;
